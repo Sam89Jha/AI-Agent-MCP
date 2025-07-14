@@ -1,0 +1,10 @@
+{
+  "requestContext": {
+    "connectionId": "test-123",
+    "routeKey": "$connect"
+  },
+  "queryStringParameters": {
+    "booking_code": "TEST123",
+    "user_type": "passenger"
+  }
+} 

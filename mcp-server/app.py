@@ -1,18 +1,18 @@
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import boto3
 import json
 import os
 import logging
+import requests
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import traceback
 import sys
 import os
 sys.path.append('..')
-from config import get_config, get_cors_origins
+from config import get_config, get_cors_origins, get_backend_api_url
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="MCP Server",
-    description="API Gateway between AI Agent and Backend Services",
+    description="Pure Orchestrator - Routes requests to API Gateway",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -39,254 +39,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# WebSocket connection manager for real-time updates
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
-    
-    async def connect(self, websocket: WebSocket, booking_code: str):
-        await websocket.accept()
-        if booking_code not in self.active_connections:
-            self.active_connections[booking_code] = []
-        self.active_connections[booking_code].append(websocket)
-        logger.info(f"WebSocket connected for booking {booking_code}. Total connections: {len(self.active_connections[booking_code])}")
-    
-    def disconnect(self, websocket: WebSocket, booking_code: str):
-        if booking_code in self.active_connections:
-            self.active_connections[booking_code].remove(websocket)
-            if not self.active_connections[booking_code]:
-                del self.active_connections[booking_code]
-        logger.info(f"WebSocket disconnected for booking {booking_code}")
-    
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-    
-    async def broadcast_to_booking(self, message: str, booking_code: str):
-        if booking_code in self.active_connections:
-            for connection in self.active_connections[booking_code]:
-                try:
-                    await connection.send_text(message)
-                except Exception as e:
-                    logger.error(f"Error sending message to WebSocket: {e}")
-                    # Remove broken connection
-                    self.active_connections[booking_code].remove(connection)
-
-manager = ConnectionManager()
-
-# AWS clients (only for non-local environments)
-aws_region = config.get('aws_region', 'us-east-1')
-lambda_client = None
-if not config.is_local():
-    lambda_client = boto3.client('lambda', region_name=aws_region)
-
-# Local Lambda API handlers for local testing
-class LocalLambdaHandler:
-    """Local handler to simulate Lambda functions for local testing."""
+# HTTP client for API Gateway calls
+class APIGatewayClient:
+    """HTTP client for calling API Gateway endpoints."""
     
     def __init__(self):
-        self.message_cache = {}
-        self.call_cache = {}
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Content-Type': 'application/json',
+            'User-Agent': 'MCP-Server/1.0'
+        })
     
-    async def invoke_send_message(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Local implementation of send_message Lambda."""
+    def call_send_message(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Call send_message API via HTTP."""
         try:
-            booking_code = payload.get('booking_code')
-            message = payload.get('message')
-            sender = payload.get('sender')
-            message_type = payload.get('message_type', 'text')
-            timestamp = payload.get('timestamp', datetime.now().isoformat())
+            url = get_backend_api_url('send_message')
+            logger.info(f"Calling send_message API: {url}")
             
-            # Generate message ID
-            message_id = f"msg_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(message) % 1000:03d}"
+            response = self.session.post(url, json=payload, timeout=30)
+            response.raise_for_status()
             
-            # Store in local cache
-            if booking_code not in self.message_cache:
-                self.message_cache[booking_code] = []
-            
-            message_data = {
-                'id': message_id,
-                'booking_code': booking_code,
-                'message': message,
-                'sender': sender,
-                'timestamp': timestamp,
-                'type': message_type
-            }
-            
-            self.message_cache[booking_code].append(message_data)
-            
-            # Limit cache to last 100 messages
-            if len(self.message_cache[booking_code]) > 100:
-                self.message_cache[booking_code].pop(0)
-            
-            # Broadcast via WebSocket
-            websocket_message = {
-                'type': 'new_message',
-                'booking_code': booking_code,
-                'message': message_data
-            }
-            
-            if booking_code:
-                await manager.broadcast_to_booking(json.dumps(websocket_message), booking_code)
-            
+            result = response.json()
+            logger.info(f"Send message API response: {result}")
             return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'success': True,
-                    'message': 'Message sent successfully',
-                    'data': message_data
-                })
+                'statusCode': response.status_code,
+                'body': json.dumps(result)
             }
             
-        except Exception as e:
-            logger.error(f"Local send_message error: {str(e)}")
-            return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'success': False,
-                    'error': f'Internal server error: {str(e)}'
-                })
-            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Send message API error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"API Gateway error: {str(e)}")
     
-    async def invoke_make_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Local implementation of make_call Lambda."""
+    def call_make_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Call make_call API via HTTP."""
         try:
-            booking_code = payload.get('booking_code')
-            caller_type = payload.get('caller_type')
-            call_type = payload.get('call_type', 'voice')
-            action = payload.get('action')
-            duration = payload.get('duration', 0)
-            timestamp = payload.get('timestamp', datetime.now().isoformat())
+            url = get_backend_api_url('make_call')
+            logger.info(f"Calling make_call API: {url}")
             
-            # Determine callee type
-            callee_type = 'passenger' if caller_type == 'driver' else 'driver'
+            response = self.session.post(url, json=payload, timeout=30)
+            response.raise_for_status()
             
-            # Store call state
-            call_state = {
-                'booking_code': booking_code,
-                'caller_type': caller_type,
-                'callee_type': callee_type,
-                'call_type': call_type,
-                'status': action,
-                'timestamp': timestamp,
-                'duration': duration
-            }
-            
-            self.call_cache[booking_code] = call_state
-            
-            # Prepare WebSocket messages based on action
-            if action == 'initiate':
-                caller_message = {
-                    'type': 'call_state_update',
-                    'call_state': 'calling',
-                    'user_type': caller_type,
-                    'message': 'Calling...',
-                    'show_buttons': ['cancel']
-                }
-                
-                callee_message = {
-                    'type': 'call_state_update',
-                    'call_state': 'ringing',
-                    'user_type': callee_type,
-                    'message': f'Incoming call from {caller_type.title() if caller_type else "Unknown"}',
-                    'show_buttons': ['accept', 'reject']
-                }
-                
-                if booking_code:
-                    await manager.broadcast_to_booking(json.dumps(caller_message), booking_code)
-                    await manager.broadcast_to_booking(json.dumps(callee_message), booking_code)
-                
-            elif action == 'accept':
-                connected_message = {
-                    'type': 'call_state_update',
-                    'call_state': 'connected',
-                    'user_type': caller_type,
-                    'message': 'Call connected',
-                    'show_buttons': ['end']
-                }
-                
-                if booking_code:
-                    await manager.broadcast_to_booking(json.dumps(connected_message), booking_code)
-                
-            elif action == 'reject':
-                ended_message = {
-                    'type': 'call_state_update',
-                    'call_state': 'ended',
-                    'user_type': caller_type,
-                    'message': f'Call rejected by {caller_type.title() if caller_type else "Unknown"}',
-                    'show_buttons': []
-                }
-                
-                if booking_code:
-                    await manager.broadcast_to_booking(json.dumps(ended_message), booking_code)
-                
-            elif action == 'end':
-                ended_message = {
-                    'type': 'call_state_update',
-                    'call_state': 'ended',
-                    'user_type': caller_type,
-                    'message': f'Call ended - Duration: {duration} seconds',
-                    'show_buttons': []
-                }
-                
-                if booking_code:
-                    await manager.broadcast_to_booking(json.dumps(ended_message), booking_code)
-                
-                # Clear call state
-                if booking_code in self.call_cache:
-                    del self.call_cache[booking_code]
-            
+            result = response.json()
+            logger.info(f"Make call API response: {result}")
             return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'success': True,
-                    'message': f'Call {action} successfully',
-                    'data': call_state
-                })
+                'statusCode': response.status_code,
+                'body': json.dumps(result)
             }
             
-        except Exception as e:
-            logger.error(f"Local make_call error: {str(e)}")
-            return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'success': False,
-                    'error': f'Internal server error: {str(e)}'
-                })
-            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Make call API error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"API Gateway error: {str(e)}")
     
-    async def invoke_get_message(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Local implementation of get_message Lambda."""
+    def call_get_message(self, booking_code: str) -> Dict[str, Any]:
+        """Call get_message API via HTTP."""
         try:
-            booking_code = payload.get('booking_code')
+            url = get_backend_api_url('get_message')
+            params = {'booking_code': booking_code}
+            logger.info(f"Calling get_message API: {url} with params: {params}")
             
-            # Get messages from local cache
-            messages = self.message_cache.get(booking_code, [])
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
             
+            result = response.json()
+            logger.info(f"Get message API response: {result}")
             return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'success': True,
-                    'message': 'Messages retrieved successfully',
-                    'data': {
-                        'messages': messages,
-                        'count': len(messages),
-                        'source': 'local_cache'
-                    }
-                })
+                'statusCode': response.status_code,
+                'body': json.dumps(result)
             }
             
-        except Exception as e:
-            logger.error(f"Local get_message error: {str(e)}")
-            return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'success': False,
-                    'error': f'Internal server error: {str(e)}'
-                })
-            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Get message API error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"API Gateway error: {str(e)}")
 
-# Initialize local Lambda handler
-local_lambda_handler = LocalLambdaHandler()
+# Initialize API Gateway client
+api_gateway_client = APIGatewayClient()
 
 # Pydantic models
 class MessageRequest(BaseModel):
@@ -330,23 +156,13 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     try:
-        # Test Lambda connectivity (only for non-local)
-        lambda_status = "healthy"
-        if not config.is_local() and lambda_client:
-            try:
-                lambda_client.list_functions(MaxItems=1)
-            except Exception as e:
-                lambda_status = f"error: {str(e)}"
-        else:
-            lambda_status = "local handlers (local environment)"
-        
         return HealthResponse(
             status="healthy",
             timestamp=datetime.now().isoformat(),
             version="1.0.0",
-            region=aws_region,
+            region="us-east-1",
             services={
-                "lambda": lambda_status
+                "api_gateway": "healthy"
             }
         )
     except Exception as e:
@@ -358,7 +174,7 @@ async def health_check():
 async def ai_agent_handler(request: AIAgentRequest):
     """
     Main endpoint for AI Agent interactions.
-    This endpoint receives requests from the AI Agent and routes them to appropriate Lambda functions.
+    This endpoint receives requests from the AI Agent and routes them to appropriate API Gateway endpoints.
     """
     try:
         logger.info(f"AI Agent request received: {request.booking_code} - {request.user_input[:50]}...")
@@ -386,17 +202,17 @@ async def ai_agent_handler(request: AIAgentRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Send message endpoint - MCP only orchestrates, Lambda handles everything
+# Send message endpoint - MCP only orchestrates, API Gateway handles everything
 @app.post("/api/v1/send_message", response_model=Dict[str, Any])
 async def send_message(request: MessageRequest):
     """
-    Send a message by calling Lambda function.
-    MCP server only orchestrates, Lambda handles storage and WebSocket delivery.
+    Send a message by calling API Gateway.
+    MCP server only orchestrates, API Gateway handles storage and WebSocket delivery.
     """
     try:
         logger.info(f"Send message request: {request.booking_code}")
         
-        # Prepare payload for Lambda
+        # Prepare payload for API Gateway
         payload = {
             "booking_code": request.booking_code,
             "message": request.message,
@@ -405,23 +221,10 @@ async def send_message(request: MessageRequest):
             "message_type": request.message_type
         }
         
-        # Call Lambda function (local or AWS)
-        if config.is_local():
-            # Use local handler
-            result = await local_lambda_handler.invoke_send_message(payload)
-        else:
-            # Use AWS Lambda
-            function_name = config.get_lambda_function_name('send_message')
-            if lambda_client is None:
-                raise HTTPException(status_code=500, detail="Lambda client not available")
-            # Type assertion for lambda_client
-            lambda_client_typed = lambda_client  # type: ignore
-            response = lambda_client_typed.invoke(
-                FunctionName=function_name,
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            result = json.loads(response['Payload'].read())
+        # Call API Gateway
+        logger.info(f"Calling API Gateway with payload: {payload}")
+        result = api_gateway_client.call_send_message(payload)
+        logger.info(f"API Gateway response: {result}")
         
         if result.get('statusCode') != 200:
             lambda_response = json.loads(result.get('body', '{}'))
@@ -429,13 +232,9 @@ async def send_message(request: MessageRequest):
         
         # Parse Lambda response
         lambda_response = json.loads(result.get('body', '{}'))
+        logger.info(f"Parsed Lambda response: {lambda_response}")
         
-        return {
-            "success": True,
-            "message": "Message sent successfully",
-            "data": lambda_response.get('data', {}),
-            "timestamp": datetime.now().isoformat()
-        }
+        return lambda_response
         
     except HTTPException:
         raise
@@ -444,17 +243,17 @@ async def send_message(request: MessageRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Make call endpoint - MCP only orchestrates, Lambda handles everything
+# Make call endpoint - MCP only orchestrates, API Gateway handles everything
 @app.post("/api/v1/make_call", response_model=Dict[str, Any])
 async def make_call(request: CallRequest):
     """
-    Handle call operations by calling Lambda function.
-    MCP server only orchestrates, Lambda handles call logic and WebSocket delivery.
+    Handle call operations by calling API Gateway.
+    MCP server only orchestrates, API Gateway handles call logic and WebSocket delivery.
     """
     try:
         logger.info(f"Make call request: {request.booking_code} - {request.action}")
         
-        # Prepare payload for Lambda
+        # Prepare payload for API Gateway
         payload = {
             "booking_code": request.booking_code,
             "caller_type": request.caller_type,
@@ -464,21 +263,8 @@ async def make_call(request: CallRequest):
             "timestamp": datetime.now().isoformat()
         }
         
-        # Call Lambda function (local or AWS)
-        if config.is_local():
-            # Use local handler
-            result = await local_lambda_handler.invoke_make_call(payload)
-        else:
-            # Use AWS Lambda
-            function_name = config.get_lambda_function_name('make_call')
-            if lambda_client is None:
-                raise HTTPException(status_code=500, detail="Lambda client not available")
-            response = lambda_client.invoke(
-                FunctionName=function_name,
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            result = json.loads(response['Payload'].read())
+        # Call API Gateway
+        result = api_gateway_client.call_make_call(payload)
         
         if result.get('statusCode') != 200:
             lambda_response = json.loads(result.get('body', '{}'))
@@ -487,12 +273,7 @@ async def make_call(request: CallRequest):
         # Parse Lambda response
         lambda_response = json.loads(result.get('body', '{}'))
         
-        return {
-            "success": True,
-            "message": f"Call {request.action} successfully",
-            "data": lambda_response.get('data', {}),
-            "timestamp": datetime.now().isoformat()
-        }
+        return lambda_response
         
     except HTTPException:
         raise
@@ -501,36 +282,18 @@ async def make_call(request: CallRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Get messages endpoint - MCP only orchestrates, Lambda handles everything
+# Get messages endpoint - MCP only orchestrates, API Gateway handles everything
 @app.get("/api/v1/get_message/{booking_code}", response_model=Dict[str, Any])
 async def get_message(booking_code: str):
     """
-    Get messages by calling Lambda function.
-    MCP server only orchestrates, Lambda handles retrieval and caching.
+    Get messages by calling API Gateway.
+    MCP server only orchestrates, API Gateway handles retrieval and caching.
     """
     try:
         logger.info(f"Get message request: {booking_code}")
         
-        # Prepare payload for Lambda
-        payload = {
-            "booking_code": booking_code
-        }
-        
-        # Call Lambda function (local or AWS)
-        if config.is_local():
-            # Use local handler
-            result = await local_lambda_handler.invoke_get_message(payload)
-        else:
-            # Use AWS Lambda
-            function_name = config.get_lambda_function_name('get_message')
-            if lambda_client is None:
-                raise HTTPException(status_code=500, detail="Lambda client not available")
-            response = lambda_client.invoke(
-                FunctionName=function_name,
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            result = json.loads(response['Payload'].read())
+        # Call API Gateway
+        result = api_gateway_client.call_get_message(booking_code)
         
         if result.get('statusCode') != 200:
             lambda_response = json.loads(result.get('body', '{}'))
@@ -539,12 +302,7 @@ async def get_message(booking_code: str):
         # Parse Lambda response
         lambda_response = json.loads(result.get('body', '{}'))
         
-        return {
-            "success": True,
-            "message": "Messages retrieved successfully",
-            "data": lambda_response.get('data', {}),
-            "timestamp": datetime.now().isoformat()
-        }
+        return lambda_response
         
     except HTTPException:
         raise
@@ -602,12 +360,12 @@ def _extract_message_content(user_input: str, intent: str) -> str:
     else:
         return user_input
 
-# AI Agent handlers - these call Lambda functions
+# AI Agent handlers - these call API Gateway
 async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
-    """Handle send message intent by calling Lambda"""
+    """Handle send message intent by calling API Gateway"""
     message_content = _extract_message_content(request.user_input, 'send_message')
     
-    # Call send_message Lambda
+    # Call send_message API Gateway
     payload = {
         "booking_code": request.booking_code,
         "message": message_content,
@@ -616,16 +374,7 @@ async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
         "message_type": "text"
     }
     
-    if config.is_local():
-        result = await local_lambda_handler.invoke_send_message(payload)
-    else:
-        function_name = config.get_lambda_function_name('send_message')
-        response = lambda_client.invoke(
-            FunctionName=function_name,
-            InvocationType='RequestResponse',
-            Payload=json.dumps(payload)
-        )
-        result = json.loads(response['Payload'].read())
+    result = api_gateway_client.call_send_message(payload)
     
     lambda_response = json.loads(result.get('body', '{}'))
     
@@ -639,11 +388,11 @@ async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
     }
 
 async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
-    """Handle make call intent by calling Lambda"""
+    """Handle make call intent by calling API Gateway"""
     # Determine caller type
     caller_type = request.user_type
     
-    # Call make_call Lambda
+    # Call make_call API Gateway
     payload = {
         "booking_code": request.booking_code,
         "caller_type": caller_type,
@@ -653,16 +402,7 @@ async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
         "timestamp": datetime.now().isoformat()
     }
     
-    if config.is_local():
-        result = await local_lambda_handler.invoke_make_call(payload)
-    else:
-        function_name = config.get_lambda_function_name('make_call')
-        response = lambda_client.invoke(
-            FunctionName=function_name,
-            InvocationType='RequestResponse',
-            Payload=json.dumps(payload)
-        )
-        result = json.loads(response['Payload'].read())
+    result = api_gateway_client.call_make_call(payload)
     
     lambda_response = json.loads(result.get('body', '{}'))
     
@@ -676,22 +416,9 @@ async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
     }
 
 async def _handle_get_messages(request: AIAgentRequest) -> Dict[str, Any]:
-    """Handle get messages intent by calling Lambda"""
-    # Call get_message Lambda
-    payload = {
-        "booking_code": request.booking_code
-    }
-    
-    if config.is_local():
-        result = await local_lambda_handler.invoke_get_message(payload)
-    else:
-        function_name = config.get_lambda_function_name('get_message')
-        response = lambda_client.invoke(
-            FunctionName=function_name,
-            InvocationType='RequestResponse',
-            Payload=json.dumps(payload)
-        )
-        result = json.loads(response['Payload'].read())
+    """Handle get messages intent by calling API Gateway"""
+    # Call get_message API Gateway
+    result = api_gateway_client.call_get_message(request.booking_code)
     
     lambda_response = json.loads(result.get('body', '{}'))
     
@@ -718,15 +445,4 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error"}
-    )
-
-# WebSocket endpoint for real-time updates
-@app.websocket("/ws/{booking_code}")
-async def websocket_endpoint(websocket: WebSocket, booking_code: str):
-    await manager.connect(websocket, booking_code)
-    try:
-        while True:
-            # Keep connection alive
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, booking_code) 
+    ) 

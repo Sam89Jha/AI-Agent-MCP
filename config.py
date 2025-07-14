@@ -36,10 +36,11 @@ class Config:
                     'http://127.0.0.1:3000',
                     'http://127.0.0.1:3001'
                 ],
-                'lambda_functions': {
-                    'send_message': 'send-message-local',
-                    'make_call': 'make-call-local',
-                    'get_message': 'get-message-local'
+                'api_gateway_url': 'https://o2ia6qahq1.execute-api.us-east-1.amazonaws.com/prod',
+                'backend_apis': {
+                    'send_message': '/api/v1/send_message',
+                    'make_call': '/api/v1/make_call',
+                    'get_message': '/api/v1/get_message'
                 },
                 'database': {
                     'type': 'in_memory',
@@ -60,10 +61,11 @@ class Config:
                     'https://dax-staging.sameer-jha.com',
                     'https://pax-staging.sameer-jha.com'
                 ],
-                'lambda_functions': {
-                    'send_message': 'send-message-staging',
-                    'make_call': 'make-call-staging',
-                    'get_message': 'get-message-staging'
+                'api_gateway_url': 'https://o2ia6qahq1.execute-api.us-east-1.amazonaws.com/prod',
+                'backend_apis': {
+                    'send_message': '/api/v1/send_message',
+                    'make_call': '/api/v1/make_call',
+                    'get_message': '/api/v1/get_message'
                 },
                 'database': {
                     'type': 'dynamodb',
@@ -84,10 +86,11 @@ class Config:
                     'https://dax.sameer-jha.com',
                     'https://pax.sameer-jha.com'
                 ],
-                'lambda_functions': {
-                    'send_message': 'send-message-prod',
-                    'make_call': 'make-call-prod',
-                    'get_message': 'get-message-prod'
+                'api_gateway_url': 'https://o2ia6qahq1.execute-api.us-east-1.amazonaws.com/prod',
+                'backend_apis': {
+                    'send_message': '/api/v1/send_message',
+                    'make_call': '/api/v1/make_call',
+                    'get_message': '/api/v1/get_message'
                 },
                 'database': {
                     'type': 'dynamodb',
@@ -108,6 +111,13 @@ class Config:
         base_url = self.get('api_base_url')
         return f"{base_url}{endpoint}"
     
+    def get_api_gateway_url(self, api_name: str = '') -> str:
+        """Get API Gateway URL for backend APIs."""
+        base_url = self.get('api_gateway_url')
+        backend_apis = self.get('backend_apis', {})
+        endpoint = backend_apis.get(api_name, '')
+        return f"{base_url}{endpoint}"
+    
     def get_websocket_url(self) -> str:
         """Get WebSocket URL."""
         return self.get('websocket_url')
@@ -116,10 +126,9 @@ class Config:
         """Get CORS origins for current environment."""
         return self.get('cors_origins', [])
     
-    def get_lambda_function_name(self, function_type: str) -> str:
-        """Get Lambda function name for current environment."""
-        lambda_functions = self.get('lambda_functions', {})
-        return lambda_functions.get(function_type, f"{function_type}-{self.environment}")
+    def get_backend_api_url(self, api_name: str) -> str:
+        """Get backend API URL for a specific API."""
+        return self.get_api_gateway_url(api_name)
     
     def is_local(self) -> bool:
         """Check if running in local environment."""
@@ -168,6 +177,14 @@ def get_config() -> Config:
 def get_api_url(endpoint: str = '') -> str:
     """Get API URL for endpoint."""
     return config.get_api_url(endpoint)
+
+def get_api_gateway_url(api_name: str = '') -> str:
+    """Get API Gateway URL for backend APIs."""
+    return config.get_api_gateway_url(api_name)
+
+def get_backend_api_url(api_name: str) -> str:
+    """Get backend API URL for a specific API."""
+    return config.get_backend_api_url(api_name)
 
 def get_websocket_url() -> str:
     """Get WebSocket URL."""

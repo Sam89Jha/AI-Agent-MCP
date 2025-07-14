@@ -3,18 +3,23 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 import logging
-from in_memory_cache import cache
+import boto3
+from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# In-memory connection tracking (in production, use DynamoDB)
-connections_cache = {}
+# Initialize DynamoDB
+dynamodb = boto3.resource('dynamodb')
+calls_table = dynamodb.Table(os.environ.get('CALLS_TABLE', 'calls'))
+connections_table = dynamodb.Table(os.environ.get('CONNECTIONS_TABLE', 'connections'))
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda function to handle both HTTP API calls and WebSocket events for call operations.
+    Lambda function to handle HTTP API calls for call operations.
+    WebSocket connections are handled by websocket-register Lambda.
     """
     try:
         logger.info(f"Received call event: {json.dumps(event)}")
@@ -25,11 +30,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 event.update(body)
             except Exception:
                 pass
-        # Check if this is a WebSocket event
-        if 'requestContext' in event and 'routeKey' in event.get('requestContext', {}):
-            return handle_websocket_event(event, context)
-        else:
-            return handle_http_api_call(event, context)
+        return handle_http_api_call(event, context)
         
     except Exception as e:
         logger.error(f"Lambda error: {str(e)}")
@@ -149,12 +150,22 @@ def handle_websocket_connect(event: Dict[str, Any], connection_id: str) -> Dict[
                 'body': 'Missing booking_code parameter'
             }
         
-        # Store connection in memory cache
-        if booking_code not in connections_cache:
-            connections_cache[booking_code] = []
-        
-        connections_cache[booking_code].append(connection_id)
-        logger.info(f"Connection {connection_id} stored for booking {booking_code}")
+        # Store connection in DynamoDB
+        try:
+            connections_table.put_item(
+                Item={
+                    'connection_id': connection_id,
+                    'booking_code': booking_code,
+                    'user_type': 'passenger' # Assuming a default user type for now
+                }
+            )
+            logger.info(f"Connection {connection_id} stored for booking {booking_code}")
+        except ClientError as e:
+            logger.error(f"DynamoDB put_item error for connection: {e}")
+            return {
+                'statusCode': 500,
+                'body': f'Connection error: {e.response["Error"]["Message"]}'
+            }
         
         return {
             'statusCode': 200,
@@ -171,12 +182,18 @@ def handle_websocket_connect(event: Dict[str, Any], connection_id: str) -> Dict[
 def handle_websocket_disconnect(event: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
     """Handle WebSocket disconnection."""
     try:
-        # Remove connection from memory cache
-        for booking_code, connections in connections_cache.items():
-            if connection_id in connections:
-                connections.remove(connection_id)
-                logger.info(f"Connection {connection_id} removed from booking {booking_code}")
-                break
+        # Remove connection from DynamoDB
+        try:
+            connections_table.delete_item(
+                Key={'connection_id': connection_id}
+            )
+            logger.info(f"Connection {connection_id} removed from DynamoDB")
+        except ClientError as e:
+            logger.error(f"DynamoDB delete_item error for connection: {e}")
+            return {
+                'statusCode': 500,
+                'body': f'Disconnect error: {e.response["Error"]["Message"]}'
+            }
         
         return {
             'statusCode': 200,
@@ -260,15 +277,25 @@ def handle_call_initiate(booking_code: str, caller_type: str, call_type: str, ti
         # Determine callee type
         callee_type = 'passenger' if caller_type == 'driver' else 'driver'
         
-        # Store call in cache
-        call_data = {
-            'timestamp': timestamp,
-            'call_type': call_type,
-            'status': 'initiated',
-            'duration': 0
-        }
-        
-        result = cache.add_call(booking_code, call_data)
+        # Store call in DynamoDB
+        try:
+            call_data = {
+                'booking_code': booking_code,
+                'caller_type': caller_type,
+                'callee_type': callee_type,
+                'call_type': call_type,
+                'status': 'initiated',
+                'timestamp': timestamp,
+                'duration': 0
+            }
+            calls_table.put_item(Item=call_data)
+            logger.info(f"Call initiated for booking {booking_code}: {call_data}")
+        except ClientError as e:
+            logger.error(f"DynamoDB put_item error for call: {e}")
+            return {
+                'statusCode': 500,
+                'body': f'Call initiation error: {e.response["Error"]["Message"]}'
+            }
         
         # Prepare WebSocket messages for different user types
         caller_message = {
@@ -312,15 +339,31 @@ def handle_call_initiate(booking_code: str, caller_type: str, call_type: str, ti
 def handle_call_accept(booking_code: str, caller_type: str, timestamp: str) -> Dict[str, Any]:
     """Handle call acceptance"""
     try:
-        # Get current call state from cache
-        calls_result = cache.get_calls(booking_code)
-        if not calls_result['calls']:
+        # Get current call state from DynamoDB
+        try:
+            calls_result = calls_table.get_item(Key={'booking_code': booking_code})
+            if 'Item' not in calls_result:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'No active call found for this booking'
+                    })
+                }
+            call_data = calls_result['Item']
+            if call_data['status'] != 'initiated':
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'Call is not in initiated state'
+                    })
+                }
+        except ClientError as e:
+            logger.error(f"DynamoDB get_item error for call: {e}")
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': 'No active call found for this booking'
-                })
+                'statusCode': 500,
+                'body': f'Call state retrieval error: {e.response["Error"]["Message"]}'
             }
         
         # Update call state (in a real implementation, you'd update the specific call)
@@ -357,15 +400,31 @@ def handle_call_accept(booking_code: str, caller_type: str, timestamp: str) -> D
 def handle_call_reject(booking_code: str, caller_type: str, timestamp: str) -> Dict[str, Any]:
     """Handle call rejection"""
     try:
-        # Get current call state from cache
-        calls_result = cache.get_calls(booking_code)
-        if not calls_result['calls']:
+        # Get current call state from DynamoDB
+        try:
+            calls_result = calls_table.get_item(Key={'booking_code': booking_code})
+            if 'Item' not in calls_result:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'No active call found for this booking'
+                    })
+                }
+            call_data = calls_result['Item']
+            if call_data['status'] != 'initiated':
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'Call is not in initiated state'
+                    })
+                }
+        except ClientError as e:
+            logger.error(f"DynamoDB get_item error for call: {e}")
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': 'No active call found for this booking'
-                })
+                'statusCode': 500,
+                'body': f'Call state retrieval error: {e.response["Error"]["Message"]}'
             }
         
         # Prepare WebSocket messages for both users
@@ -399,15 +458,31 @@ def handle_call_reject(booking_code: str, caller_type: str, timestamp: str) -> D
 def handle_call_end(booking_code: str, caller_type: str, duration: int, timestamp: str) -> Dict[str, Any]:
     """Handle call ending"""
     try:
-        # Get current call state from cache
-        calls_result = cache.get_calls(booking_code)
-        if not calls_result['calls']:
+        # Get current call state from DynamoDB
+        try:
+            calls_result = calls_table.get_item(Key={'booking_code': booking_code})
+            if 'Item' not in calls_result:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'No active call found for this booking'
+                    })
+                }
+            call_data = calls_result['Item']
+            if call_data['status'] != 'initiated':
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({
+                        'success': False,
+                        'error': 'Call is not in initiated state'
+                    })
+                }
+        except ClientError as e:
+            logger.error(f"DynamoDB get_item error for call: {e}")
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': 'No active call found for this booking'
-                })
+                'statusCode': 500,
+                'body': f'Call state retrieval error: {e.response["Error"]["Message"]}'
             }
         
         # Prepare WebSocket messages for both users
@@ -454,12 +529,29 @@ def send_websocket_message(booking_code: str, user_type: str, message: Dict[str,
 
 def get_connections_for_booking(booking_code: str) -> list:
     """Get all WebSocket connections for a booking code."""
-    return connections_cache.get(booking_code, [])
+    try:
+        response = connections_table.query(
+            IndexName='booking_code-index',
+            KeyConditionExpression=Key('booking_code').eq(booking_code)
+        )
+        return [item['connection_id'] for item in response.get('Items', [])]
+    except ClientError as e:
+        logger.error(f"DynamoDB query error for connections: {e}")
+        return []
 
 def remove_connection(connection_id: str):
     """Remove a stale WebSocket connection."""
-    for booking_code, connections in connections_cache.items():
-        if connection_id in connections:
-            connections.remove(connection_id)
-            logger.info(f"Removed stale connection {connection_id} from booking {booking_code}")
-            break 
+    try:
+        response = connections_table.query(
+            KeyConditionExpression=Key('connection_id').eq(connection_id)
+        )
+        for item in response['Items']:
+            connections_table.delete_item(
+                Key={
+                    'connection_id': connection_id,
+                    'booking_code': item['booking_code']
+                }
+            )
+            logger.info(f"Removed stale connection {connection_id} from booking {item['booking_code']}")
+    except ClientError as e:
+        logger.error(f"DynamoDB delete_item error for stale connection: {e}") 
