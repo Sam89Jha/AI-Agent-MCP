@@ -356,6 +356,7 @@ const App: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'connected' | 'ended'>('idle');
   const [callDuration, setCallDuration] = useState(0);
+  const [callButtons, setCallButtons] = useState<('accept' | 'reject' | 'end' | 'cancel')[]>([]);
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -577,11 +578,15 @@ const App: React.FC = () => {
     if (!isConnected) return;
 
     setStatusMessage('Initiating call...');
+    setCallState('calling');
+    setCallButtons(['cancel']);
 
     try {
       const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
         booking_code: bookingCode,
+        caller_type: 'passenger',
         call_type: 'voice',
+        action: 'initiate',
         duration: 0
       });
 
@@ -598,11 +603,13 @@ const App: React.FC = () => {
           }
         };
         setMessages(prev => [...prev, callMessage]);
-        setStatusMessage('Call initiated!');
+        setStatusMessage('Calling driver...');
       }
     } catch (error) {
       console.error('Make call error:', error);
       setStatusMessage('Failed to initiate call. Please try again.');
+      setCallState('idle');
+      setCallButtons([]);
     }
   };
 
@@ -672,22 +679,11 @@ const App: React.FC = () => {
     // Reset call state and duration
     setCallState('calling');
     setCallDuration(0);
+    setCallButtons(['cancel']);
     setStatusMessage('Initiating call...');
     
-    // Send call initiation via WebSocket
-    if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        type: 'call_initiate',
-        from: 'passenger',
-        booking_code: bookingCode
-      }));
-    }
-    
-    // Simulate call flow with delays
-    setTimeout(() => {
-      setCallState('ringing');
-      setStatusMessage('Calling driver...');
-    }, 2000); // 2 second delay before ringing
+    // Call the make_call API
+    makeCall();
   };
 
   // Start call timer
@@ -711,7 +707,7 @@ const App: React.FC = () => {
   };
 
   // End call
-  const endCall = () => {
+  const endCall = async () => {
     // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -720,15 +716,34 @@ const App: React.FC = () => {
     
     setCallState('ended');
     setStatusMessage(`Call ended - Duration: ${callDuration} seconds`);
+    setCallButtons([]);
     
-    // Send call end via WebSocket with duration
-    if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        type: 'call_end',
-        from: 'passenger',
+    // Call the make_call API to end the call
+    try {
+      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
         booking_code: bookingCode,
+        caller_type: 'passenger',
+        call_type: 'voice',
+        action: 'end',
         duration: callDuration
-      }));
+      });
+
+      if (response.data.success) {
+        const callMessage: Message = {
+          id: Date.now().toString(),
+          text: `Call ended - Duration: ${callDuration} seconds`,
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+          type: 'call',
+          callDetails: {
+            duration: callDuration,
+            status: 'ended'
+          }
+        };
+        setMessages(prev => [...prev, callMessage]);
+      }
+    } catch (error) {
+      console.error('End call error:', error);
     }
     
     setTimeout(() => {
@@ -738,33 +753,113 @@ const App: React.FC = () => {
   };
 
   // Accept call
-  const acceptCall = () => {
+  const acceptCall = async () => {
     setCallState('connected');
     setStatusMessage('Call accepted');
+    setCallButtons(['end']);
     startCallTimer();
     
-    // Send call acceptance via WebSocket
-    if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        type: 'call_accept',
-        from: 'passenger',
-        booking_code: bookingCode
-      }));
+    // Call the make_call API to accept the call
+    try {
+      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
+        booking_code: bookingCode,
+        caller_type: 'passenger',
+        call_type: 'voice',
+        action: 'accept',
+        duration: 0
+      });
+
+      if (response.data.success) {
+        const callMessage: Message = {
+          id: Date.now().toString(),
+          text: 'Call accepted',
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+          type: 'call',
+          callDetails: {
+            duration: 0,
+            status: 'connected'
+          }
+        };
+        setMessages(prev => [...prev, callMessage]);
+      }
+    } catch (error) {
+      console.error('Accept call error:', error);
     }
   };
 
   // Reject call
-  const rejectCall = () => {
+  const rejectCall = async () => {
     setCallState('ended');
     setStatusMessage('Call rejected');
+    setCallButtons([]);
     
-    // Send call rejection via WebSocket
-    if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(JSON.stringify({
-        type: 'call_reject',
-        from: 'passenger',
-        booking_code: bookingCode
-      }));
+    // Call the make_call API to reject the call
+    try {
+      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
+        booking_code: bookingCode,
+        caller_type: 'passenger',
+        call_type: 'voice',
+        action: 'reject',
+        duration: 0
+      });
+
+      if (response.data.success) {
+        const callMessage: Message = {
+          id: Date.now().toString(),
+          text: 'Call rejected',
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+          type: 'call',
+          callDetails: {
+            duration: 0,
+            status: 'rejected'
+          }
+        };
+        setMessages(prev => [...prev, callMessage]);
+      }
+    } catch (error) {
+      console.error('Reject call error:', error);
+    }
+    
+    setTimeout(() => {
+      setCallState('idle');
+      setCallDuration(0);
+    }, 2000);
+  };
+
+  // Cancel call
+  const cancelCall = async () => {
+    setCallState('ended');
+    setStatusMessage('Call cancelled');
+    setCallButtons([]);
+    
+    // Call the make_call API to end the call
+    try {
+      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
+        booking_code: bookingCode,
+        caller_type: 'passenger',
+        call_type: 'voice',
+        action: 'end',
+        duration: 0
+      });
+
+      if (response.data.success) {
+        const callMessage: Message = {
+          id: Date.now().toString(),
+          text: 'Call cancelled',
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+          type: 'call',
+          callDetails: {
+            duration: 0,
+            status: 'cancelled'
+          }
+        };
+        setMessages(prev => [...prev, callMessage]);
+      }
+    } catch (error) {
+      console.error('Cancel call error:', error);
     }
     
     setTimeout(() => {
@@ -814,98 +909,31 @@ const App: React.FC = () => {
         const data = JSON.parse(event.data);
         console.log('📨 WebSocket message received:', data);
         
-        if (data.type === 'call_initiate' && data.from === 'driver') {
-          // Incoming call from driver
-          setCallState('ringing');
-          setStatusMessage('Incoming call from Driver...');
+        if (data.type === 'call_state_update') {
+          // Handle call state updates from Lambda
+          const { call_state, user_type, message, show_buttons } = data;
           
-          // Add call log to messages if provided
-          if (data.call_log) {
-            const callMessage: Message = {
-              id: `call_${Date.now()}`,
-              text: data.call_log.message,
-              sender: 'ai',
-              timestamp: data.call_log.timestamp,
-              type: 'call',
-              callDetails: {
-                duration: data.call_log.duration,
-                status: data.call_log.status
-              }
-            };
-            setMessages(prev => [...prev, callMessage]);
+          setCallState(call_state);
+          setStatusMessage(message);
+          
+          // Update call buttons based on user type and state
+          if (call_state === 'calling' && user_type === 'passenger') {
+            // Passenger is calling - show cancel button
+            setCallButtons(['cancel']);
+          } else if (call_state === 'ringing' && user_type === 'passenger') {
+            // Passenger is being called - show accept/reject buttons
+            setCallButtons(['accept', 'reject']);
+          } else if (call_state === 'connected') {
+            // Call is connected - show end button for both
+            setCallButtons(['end']);
+          } else if (call_state === 'ended') {
+            // Call ended - no buttons
+            setCallButtons([]);
+            setTimeout(() => {
+              setCallState('idle');
+              setCallDuration(0);
+            }, 2000);
           }
-        } else if (data.type === 'call_accept' && data.from === 'driver') {
-          // Call accepted by driver
-          setCallState('connected');
-          setStatusMessage('Call connected');
-          startCallTimer();
-          
-          // Add call log to messages if provided
-          if (data.call_log) {
-            const callMessage: Message = {
-              id: `call_${Date.now()}`,
-              text: data.call_log.message,
-              sender: 'ai',
-              timestamp: data.call_log.timestamp,
-              type: 'call',
-              callDetails: {
-                duration: data.call_log.duration,
-                status: data.call_log.status
-              }
-            };
-            setMessages(prev => [...prev, callMessage]);
-          }
-        } else if (data.type === 'call_reject' && data.from === 'driver') {
-          // Call rejected by driver
-          setCallState('ended');
-          setStatusMessage('Call rejected by Driver');
-          
-          // Add call log to messages if provided
-          if (data.call_log) {
-            const callMessage: Message = {
-              id: `call_${Date.now()}`,
-              text: data.call_log.message,
-              sender: 'ai',
-              timestamp: data.call_log.timestamp,
-              type: 'call',
-              callDetails: {
-                duration: data.call_log.duration,
-                status: data.call_log.status
-              }
-            };
-            setMessages(prev => [...prev, callMessage]);
-          }
-          
-          setTimeout(() => setCallState('idle'), 2000);
-        } else if (data.type === 'call_end' && data.from === 'driver') {
-          // Call ended by driver
-          setCallState('ended');
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          setStatusMessage('Call ended by Driver');
-          
-          // Add call log to messages if provided
-          if (data.call_log) {
-            const callMessage: Message = {
-              id: `call_${Date.now()}`,
-              text: data.call_log.message,
-              sender: 'ai',
-              timestamp: data.call_log.timestamp,
-              type: 'call',
-              callDetails: {
-                duration: data.call_log.duration,
-                status: data.call_log.status
-              }
-            };
-            setMessages(prev => [...prev, callMessage]);
-          }
-          
-          setTimeout(() => {
-            setCallState('idle');
-            setCallDuration(0);
-          }, 2000);
         }
       };
       
@@ -1069,17 +1097,22 @@ const App: React.FC = () => {
             )}
             
             <CallButtons>
-              {callState === 'ringing' && (
-                <>
-                  <CallButton $type="accept" onClick={acceptCall}>
-                    <FaPhone />
-                  </CallButton>
-                  <CallButton $type="reject" onClick={rejectCall}>
-                    <FaMicrophoneSlash />
-                  </CallButton>
-                </>
+              {callButtons.includes('cancel') && (
+                <CallButton $type="end" onClick={cancelCall}>
+                  <FaMicrophoneSlash />
+                </CallButton>
               )}
-              {callState === 'connected' && (
+              {callButtons.includes('accept') && (
+                <CallButton $type="accept" onClick={acceptCall}>
+                  <FaPhone />
+                </CallButton>
+              )}
+              {callButtons.includes('reject') && (
+                <CallButton $type="reject" onClick={rejectCall}>
+                  <FaMicrophoneSlash />
+                </CallButton>
+              )}
+              {callButtons.includes('end') && (
                 <CallButton $type="end" onClick={endCall}>
                   <FaMicrophoneSlash />
                 </CallButton>

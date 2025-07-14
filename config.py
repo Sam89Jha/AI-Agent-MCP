@@ -23,8 +23,8 @@ class Config:
         self.configs = {
             Environment.LOCAL.value: {
                 'mcp_server_url': 'http://localhost:8000',
-                'dax_app_url': 'http://localhost:3001',
-                'pax_app_url': 'http://localhost:3002',
+                'dax_app_url': 'http://localhost:3000',  # Fixed port
+                'pax_app_url': 'http://localhost:3001',  # Fixed port
                 'api_base_url': 'http://localhost:8000',
                 'websocket_url': 'ws://localhost:8000/ws',
                 'aws_region': 'us-east-1',
@@ -33,10 +33,8 @@ class Config:
                 'cors_origins': [
                     'http://localhost:3000',
                     'http://localhost:3001',
-                    'http://localhost:3002',
                     'http://127.0.0.1:3000',
-                    'http://127.0.0.1:3001',
-                    'http://127.0.0.1:3002'
+                    'http://127.0.0.1:3001'
                 ],
                 'lambda_functions': {
                     'send_message': 'send-message-local',

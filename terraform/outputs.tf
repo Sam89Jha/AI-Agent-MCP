@@ -1,69 +1,41 @@
-# Outputs for AI-Driven Chat & Voice Assistant Demo
+# Outputs for NavieTakieSimulation
 
-output "mcp_server_public_ip" {
-  description = "Public IP address of the MCP server"
-  value       = aws_eip.mcp_server.public_ip
+output "lambda_function_name" {
+  description = "Name of the Lambda function"
+  value       = aws_lambda_function.main.function_name
 }
 
-output "mcp_server_public_dns" {
-  description = "Public DNS name of the MCP server"
-  value       = aws_eip.mcp_server.public_dns
+output "lambda_function_arn" {
+  description = "ARN of the Lambda function"
+  value       = aws_lambda_function.main.arn
 }
 
-output "dax_app_cloudfront_url" {
-  description = "CloudFront URL for DAX app"
-  value       = "https://dax.sameer-jha.com"
+output "api_gateway_url" {
+  description = "URL of the main API Gateway"
+  value       = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
 }
 
-output "pax_app_cloudfront_url" {
-  description = "CloudFront URL for PAX app"
-  value       = "https://pax.sameer-jha.com"
+output "websocket_api_gateway_url" {
+  description = "URL of the WebSocket API Gateway"
+  value       = "wss://${aws_api_gateway_rest_api.websocket.id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}"
 }
 
-output "mcp_server_url" {
-  description = "MCP server URL"
-  value       = "https://mcp.sameer-jha.com"
-}
-
-output "dynamodb_table_name" {
-  description = "Name of the DynamoDB table"
+output "dynamodb_messages_table" {
+  description = "Name of the messages DynamoDB table"
   value       = aws_dynamodb_table.messages.name
 }
 
-output "lambda_functions" {
-  description = "Lambda function ARNs"
-  value = {
-    send_message = aws_lambda_function.send_message.arn
-    make_call    = aws_lambda_function.make_call.arn
-    get_message  = aws_lambda_function.get_message.arn
-  }
+output "dynamodb_connections_table" {
+  description = "Name of the connections DynamoDB table"
+  value       = aws_dynamodb_table.connections.name
 }
 
-output "s3_buckets" {
-  description = "S3 bucket names"
-  value = {
-    dax_app = aws_s3_bucket.dax_app.bucket
-    pax_app = aws_s3_bucket.pax_app.bucket
-  }
+output "dynamodb_calls_table" {
+  description = "Name of the calls DynamoDB table"
+  value       = aws_dynamodb_table.calls.name
 }
 
-output "cloudfront_distributions" {
-  description = "CloudFront distribution IDs"
-  value = {
-    dax_app = aws_cloudfront_distribution.dax_app.id
-    pax_app = aws_cloudfront_distribution.pax_app.id
-  }
-}
-
-output "security_group_id" {
-  description = "Security group ID for MCP server"
-  value       = aws_security_group.mcp_server.id
-}
-
-output "iam_role_arns" {
-  description = "IAM role ARNs"
-  value = {
-    lambda_role = aws_iam_role.lambda_role.arn
-    ec2_role    = aws_iam_role.ec2_role.arn
-  }
+output "cloudwatch_log_group" {
+  description = "Name of the CloudWatch log group"
+  value       = aws_cloudwatch_log_group.lambda_logs.name
 } 

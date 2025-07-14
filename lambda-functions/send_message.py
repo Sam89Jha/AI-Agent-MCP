@@ -13,9 +13,12 @@ logger.setLevel(logging.INFO)
 dynamodb = boto3.resource('dynamodb')
 apigatewaymanagementapi = boto3.client('apigatewaymanagementapi', endpoint_url=os.environ.get('WEBSOCKET_ENDPOINT'))
 
+# In-memory cache for messages (in production, use DynamoDB)
+message_cache = {}
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda function to send messages and broadcast via WebSocket.
+    Lambda function to send messages, store in DynamoDB, and broadcast via WebSocket.
     """
     try:
         logger.info(f"Received event: {json.dumps(event)}")
@@ -56,6 +59,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         table.put_item(Item=item)
         logger.info(f"Message stored in DynamoDB: {message_id}")
+        
+        # Cache message for quick retrieval
+        cache_key = f"messages:{booking_code}"
+        if cache_key not in message_cache:
+            message_cache[cache_key] = []
+        
+        # Add to cache (limit to last 100 messages)
+        cached_messages = message_cache[cache_key]
+        cached_messages.append(item)
+        if len(cached_messages) > 100:
+            cached_messages.pop(0)  # Remove oldest message
+        message_cache[cache_key] = cached_messages
         
         # Prepare message for WebSocket broadcast
         websocket_message = {
