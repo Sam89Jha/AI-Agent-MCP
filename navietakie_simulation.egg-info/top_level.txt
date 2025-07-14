@@ -1,0 +1,7 @@
+bedrock-agent
+frontend
+lambda-functions
+mcp-server
+scripts
+staging
+terraform

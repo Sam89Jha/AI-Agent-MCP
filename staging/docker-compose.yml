@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  # MCP Server
+  mcp-server:
+    build: ../mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_REGION=us-east-1
+      - DYNAMODB_TABLE=chat-messages-local
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - ../mcp-server:/app
+      - ./logs:/app/logs
+    networks:
+      - navietakie-network
+    depends_on:
+      - dynamodb-local
+
+  # DynamoDB Local
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8001:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    volumes:
+      - ./dynamodb-data:/home/dynamodblocal/data
+    networks:
+      - navietakie-network
+
+  # DAX App (Driver Interface)
+  dax-app:
+    build: ../frontend/dax-app
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_ENV=staging
+    volumes:
+      - ../frontend/dax-app:/app
+      - /app/node_modules
+    networks:
+      - navietakie-network
+    depends_on:
+      - mcp-server
+
+  # PAX App (Passenger Interface)
+  pax-app:
+    build: ../frontend/pax-app
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_ENV=staging
+    volumes:
+      - ../frontend/pax-app:/app
+      - /app/node_modules
+    networks:
+      - navietakie-network
+    depends_on:
+      - mcp-server
+
+  # Local Lambda Testing
+  lambda-local:
+    image: lambci/lambda:python3.9
+    ports:
+      - "9000:8080"
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+    volumes:
+      - ../lambda-functions:/var/task
+      - ./lambda-local:/tmp
+    networks:
+      - navietakie-network
+    depends_on:
+      - dynamodb-local
+    command: "python -m awslambdaric"
+
+  # Test Runner
+  test-runner:
+    build: .
+    volumes:
+      - .:/app
+      - ../lambda-functions:/lambda-functions
+      - ../mcp-server:/mcp-server
+      - ../frontend:/frontend
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - MCP_SERVER_URL=http://mcp-server:8000
+      - DAX_APP_URL=http://dax-app:3000
+      - PAX_APP_URL=http://pax-app:3000
+    networks:
+      - navietakie-network
+    depends_on:
+      - mcp-server
+      - dynamodb-local
+      - dax-app
+      - pax-app
+    command: "python test_runner.py"
+
+networks:
+  navietakie-network:
+    driver: bridge
+
+volumes:
+  dynamodb-data:
+  lambda-local: 

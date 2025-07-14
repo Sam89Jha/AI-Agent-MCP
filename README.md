@@ -1,0 +1,318 @@
+# NavieTakie Simulation
+
+An AI-driven chat and voice assistant demo simulating a Grab-style driver (DAX) and passenger (PAX) communication system.
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   DAX App       │    │   PAX App       │    │  Bedrock Agent  │
+│  (Driver UI)    │    │ (Passenger UI)  │    │   (Central AI)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   MCP Server    │
+                    │  (API Gateway)  │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │  Lambda Functions│
+                    │  (Backend APIs) │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   DynamoDB      │
+                    │   (Storage)     │
+                    └─────────────────┘
+```
+
+## 🚀 Features
+
+- **Voice & Text Chat**: Real-time communication between drivers and passengers
+- **AI-Powered Assistant**: AWS Bedrock Agent for intelligent conversation handling
+- **Mobile-First Design**: Responsive React applications optimized for mobile devices
+- **Serverless Backend**: AWS Lambda functions for scalable API endpoints
+- **Real-time Updates**: WebSocket-like polling for instant message delivery
+- **Cost Optimized**: Estimated ~$10.47/month for full production deployment
+
+## 📁 Project Structure
+
+```
+NavieTakieSimulation/
+├── terraform/                 # Infrastructure as Code
+│   ├── main.tf               # Main Terraform configuration
+│   ├── variables.tf          # Variable definitions
+│   ├── outputs.tf           # Output values
+│   └── user_data.sh         # EC2 initialization script
+├── lambda-functions/         # AWS Lambda Functions
+│   ├── send_message.py      # Send message handler
+│   ├── make_call.py         # Call initiation handler
+│   ├── get_message.py       # Message retrieval handler
+│   └── requirements.txt     # Python dependencies
+├── mcp-server/              # MCP Server (API Gateway)
+│   ├── app.py              # FastAPI application
+│   ├── requirements.txt    # Python dependencies
+│   ├── Dockerfile         # Container configuration
+│   └── docker-compose.yml # Local development
+├── frontend/               # React Applications
+│   ├── dax-app/           # Driver Assistant Experience
+│   │   ├── src/           # React source code
+│   │   ├── public/        # Static assets
+│   │   └── package.json   # Dependencies
+│   └── pax-app/           # Passenger Assistant Experience
+│       ├── src/           # React source code
+│       ├── public/        # Static assets
+│       └── package.json   # Dependencies
+├── bedrock-agent/          # AWS Bedrock Agent Configuration
+│   ├── agent-config.json  # Agent configuration
+│   └── agent-deployment.yaml # CloudFormation template
+├── staging/               # Local Development & Testing
+│   ├── docker-compose.yml # Complete staging environment
+│   ├── test_runner.py     # Comprehensive test suite
+│   └── requirements.txt   # Testing dependencies
+├── scripts/               # Deployment Scripts
+│   └── deploy.sh         # Automated deployment script
+└── README.md             # This file
+```
+
+## 🛠️ Prerequisites
+
+Before deploying, ensure you have the following installed:
+
+- **AWS CLI** (v2.x)
+- **Terraform** (v1.x)
+- **Docker** (v20.x)
+- **Node.js** (v18.x)
+- **Python** (v3.9+)
+- **jq** (for JSON parsing)
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+
+```bash
+git clone <repository-url>
+cd NavieTakieSimulation
+```
+
+### 2. Configure AWS
+
+```bash
+aws configure
+# Enter your AWS Access Key ID, Secret Access Key, and region
+```
+
+### 3. Deploy Everything
+
+```bash
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+```
+
+The deployment script will:
+- ✅ Check prerequisites
+- 🏗️ Build frontend applications
+- ☁️ Deploy AWS infrastructure
+- 🔧 Deploy Lambda functions
+- 🖥️ Deploy MCP Server to EC2
+- 🌐 Deploy frontend apps to S3
+- 🔍 Run health checks
+- 📊 Display deployment summary
+
+## 🧪 Local Development
+
+### Staging Environment
+
+```bash
+cd staging
+docker-compose up -d
+```
+
+This starts:
+- **MCP Server** on `http://localhost:8000`
+- **DynamoDB Local** on `http://localhost:8001`
+- **DAX App** on `http://localhost:3000`
+- **PAX App** on `http://localhost:3001`
+
+### Individual Components
+
+#### MCP Server
+```bash
+cd mcp-server
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+#### Frontend Apps
+```bash
+# DAX App
+cd frontend/dax-app
+npm install
+npm start
+
+# PAX App
+cd frontend/pax-app
+npm install
+npm start
+```
+
+## 🧪 Testing
+
+### Run Complete Test Suite
+
+```bash
+cd staging
+python test_runner.py
+```
+
+### Individual Tests
+
+```bash
+# Test MCP Server
+curl http://localhost:8000/health
+
+# Test Lambda Functions
+aws lambda invoke --function-name send-message --payload '{"booking_code":"TEST","message":"Hello","sender":"driver"}' response.json
+
+# Test Frontend Apps
+curl http://localhost:3000
+curl http://localhost:3001
+```
+
+## 🌐 Production URLs
+
+After deployment, your applications will be available at:
+
+- **DAX (Driver)**: `https://dax.sameer-jha.com`
+- **PAX (Passenger)**: `https://pax.sameer-jha.com`
+- **MCP Server**: `https://mcp.sameer-jha.com`
+
+## 💰 Cost Breakdown
+
+| Service | Monthly Cost | Description |
+|---------|-------------|-------------|
+| EC2 (t3.micro) | ~$8.47 | MCP Server hosting |
+| Lambda | ~$0.50 | API functions |
+| DynamoDB | ~$1.00 | Message storage |
+| S3 + CloudFront | ~$0.50 | Static hosting |
+| **Total** | **~$10.47** | Full production |
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+
+# Application Configuration
+REACT_APP_API_URL=http://localhost:8000
+DYNAMODB_TABLE=chat-messages
+```
+
+### Domain Configuration
+
+Update the domain in `scripts/deploy.sh`:
+```bash
+DOMAIN="your-domain.com"
+DAX_SUBDOMAIN="dax"
+PAX_SUBDOMAIN="pax"
+MCP_SUBDOMAIN="mcp"
+```
+
+## 🔒 Security
+
+- **IAM Roles**: Least privilege access for all services
+- **Security Groups**: Restricted network access
+- **HTTPS**: SSL/TLS encryption for all endpoints
+- **CORS**: Configured for cross-origin requests
+- **Input Validation**: All API inputs are validated
+
+## 📊 Monitoring
+
+### CloudWatch Metrics
+- Lambda function invocations and duration
+- DynamoDB read/write capacity
+- EC2 instance metrics
+- CloudFront distribution metrics
+
+### Application Logs
+- Lambda function logs in CloudWatch
+- MCP Server logs in Docker containers
+- Frontend application logs in browser console
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **EC2 Instance Not Starting**
+   ```bash
+   aws ec2 describe-instances --instance-ids <instance-id>
+   ```
+
+2. **Lambda Function Errors**
+   ```bash
+   aws logs describe-log-groups --log-group-name-prefix /aws/lambda/
+   ```
+
+3. **Frontend Build Failures**
+   ```bash
+   cd frontend/dax-app
+   npm install --force
+   npm run build
+   ```
+
+4. **MCP Server Connection Issues**
+   ```bash
+   ssh -i key.pem ubuntu@<ec2-ip>
+   docker logs mcp-server
+   ```
+
+### Health Checks
+
+```bash
+# Test MCP Server
+curl -f http://localhost:8000/health
+
+# Test Lambda Functions
+aws lambda invoke --function-name send-message --payload '{"test":"data"}' response.json
+
+# Test Frontend Apps
+curl -f http://localhost:3000
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For support and questions:
+- Create an issue in the repository
+- Check the troubleshooting section
+- Review the logs and metrics
+
+## 🎯 Roadmap
+
+- [ ] WebSocket support for real-time messaging
+- [ ] Push notifications
+- [ ] Multi-language support
+- [ ] Advanced AI features
+- [ ] Analytics dashboard
+- [ ] Mobile apps (React Native)
+
+---
+
+**Built with ❤️ using AWS, React, and Python** 

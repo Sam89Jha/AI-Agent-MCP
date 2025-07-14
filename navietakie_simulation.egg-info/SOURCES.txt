@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+frontend/dax-app/node_modules/flatted/python/flatted.py
+frontend/dax-app/node_modules/shell-quote/print.py
+frontend/pax-app/node_modules/flatted/python/flatted.py
+frontend/pax-app/node_modules/shell-quote/print.py
+lambda-functions/get_message.py
+lambda-functions/make_call.py
+lambda-functions/send_message.py
+mcp-server/app.py
+navietakie_simulation.egg-info/PKG-INFO
+navietakie_simulation.egg-info/SOURCES.txt
+navietakie_simulation.egg-info/dependency_links.txt
+navietakie_simulation.egg-info/requires.txt
+navietakie_simulation.egg-info/top_level.txt
+staging/test_runner.py
