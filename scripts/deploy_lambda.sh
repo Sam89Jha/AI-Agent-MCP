@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Deploy Lambda Functions Script
-# Deploys the Lambda functions to AWS using Terraform
+# Deploys individual Lambda functions to AWS using Terraform
 
 set -e
 
@@ -63,7 +63,7 @@ terraform apply tfplan
 
 # Get outputs
 echo ""
-echo "✅ Deployment completed successfully!"
+echo "✅ Lambda deployment completed successfully!"
 echo ""
 echo "📊 Deployment Outputs:"
 echo "======================"
@@ -75,11 +75,20 @@ rm -f tfplan
 echo ""
 echo "🎉 Lambda functions deployed successfully!"
 echo ""
-echo "📝 Next steps:"
-echo "1. Update your frontend apps to use the new API Gateway URLs"
-echo "2. Test the WebSocket connections"
-echo "3. Monitor CloudWatch logs for any issues"
+echo "📝 Deployed Functions:"
+echo "  ✅ send-message: Send chat messages"
+echo "  ✅ make-call: Handle call operations"
+echo "  ✅ get-message: Retrieve messages"
+echo "  ✅ websocket-handler: Handle WebSocket events"
 echo ""
-echo "🔗 API Gateway URLs:"
-echo "  REST API: $(terraform output -raw api_gateway_url)"
-echo "  WebSocket: $(terraform output -raw websocket_api_gateway_url)" 
+echo "🔗 Lambda Functions:"
+echo "  send-message: Handler: send_message.lambda_handler"
+echo "  make-call: Handler: make_call.lambda_handler"
+echo "  get-message: Handler: get_message.lambda_handler"
+echo "  websocket-handler: Handler: websocket_handler.lambda_handler"
+echo ""
+echo "💡 Next steps:"
+echo "1. Deploy the MCP server to EC2"
+echo "2. Deploy the frontend apps to S3"
+echo "3. Test each Lambda function individually"
+echo "4. Set up API Gateway to route to these functions" 

@@ -125,9 +125,9 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-# DynamoDB access for Lambda
-resource "aws_iam_role_policy" "lambda_dynamodb" {
-  name = "lambda_dynamodb_policy"
+# Basic Lambda execution policy (no DynamoDB needed)
+resource "aws_iam_role_policy" "lambda_basic" {
+  name = "lambda_basic_policy"
   role = aws_iam_role.lambda_role.id
 
   policy = jsonencode({
@@ -136,14 +136,11 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:Query",
-          "dynamodb:Scan",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem"
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
         ]
-        Resource = aws_dynamodb_table.messages.arn
+        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })
@@ -160,15 +157,14 @@ resource "aws_lambda_function" "send_message" {
   filename         = data.archive_file.send_message_zip.output_path
   function_name    = "send-message"
   role            = aws_iam_role.lambda_role.arn
-  handler         = "lambda_function.lambda_handler"
+  handler         = "send_message.lambda_handler"
   runtime         = "python3.9"
   timeout         = 30
   memory_size     = 128
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.messages.name
-      REGION         = var.aws_region
+      REGION = var.aws_region
     }
   }
 
@@ -182,15 +178,14 @@ resource "aws_lambda_function" "make_call" {
   filename         = data.archive_file.make_call_zip.output_path
   function_name    = "make-call"
   role            = aws_iam_role.lambda_role.arn
-  handler         = "lambda_function.lambda_handler"
+  handler         = "make_call.lambda_handler"
   runtime         = "python3.9"
   timeout         = 30
   memory_size     = 128
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.messages.name
-      REGION         = var.aws_region
+      REGION = var.aws_region
     }
   }
 
@@ -204,15 +199,14 @@ resource "aws_lambda_function" "get_message" {
   filename         = data.archive_file.get_message_zip.output_path
   function_name    = "get-message"
   role            = aws_iam_role.lambda_role.arn
-  handler         = "lambda_function.lambda_handler"
+  handler         = "get_message.lambda_handler"
   runtime         = "python3.9"
   timeout         = 30
   memory_size     = 128
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.messages.name
-      REGION         = var.aws_region
+      REGION = var.aws_region
     }
   }
 
@@ -221,30 +215,14 @@ resource "aws_lambda_function" "get_message" {
   }
 }
 
+
+
 # =============================================================================
-# DYNAMODB TABLE
+# IN-MEMORY CACHE (No DynamoDB needed)
 # =============================================================================
 
-resource "aws_dynamodb_table" "messages" {
-  name           = "chat-messages"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "booking_code"
-  range_key      = "timestamp"
-
-  attribute {
-    name = "booking_code"
-    type = "S"
-  }
-
-  attribute {
-    name = "timestamp"
-    type = "S"
-  }
-
-  tags = {
-    Name = "chat-messages"
-  }
-}
+# Note: Using in-memory cache instead of DynamoDB for all environments
+# This simplifies the architecture and reduces costs
 
 # =============================================================================
 # S3 BUCKETS (Web Hosting)
@@ -623,21 +601,26 @@ resource "random_string" "bucket_suffix" {
   upper   = false
 }
 
-# Archive files for Lambda functions
+# Archive files for individual Lambda functions
 data "archive_file" "send_message_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../backend/lambda-functions/send_message"
-  output_path = "${path.module}/send_message.zip"
+  source_dir  = "${path.module}/../lambda-functions"
+  output_path = "${path.module}/lambda-send-message.zip"
+  excludes    = ["*.pyc", "__pycache__", "*.pyo"]
 }
 
 data "archive_file" "make_call_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../backend/lambda-functions/make_call"
-  output_path = "${path.module}/make_call.zip"
+  source_dir  = "${path.module}/../lambda-functions"
+  output_path = "${path.module}/lambda-make-call.zip"
+  excludes    = ["*.pyc", "__pycache__", "*.pyo"]
 }
 
 data "archive_file" "get_message_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../backend/lambda-functions/get_message"
-  output_path = "${path.module}/get_message.zip"
-} 
+  source_dir  = "${path.module}/../lambda-functions"
+  output_path = "${path.module}/lambda-get-message.zip"
+  excludes    = ["*.pyc", "__pycache__", "*.pyo"]
+}
+
+ 
