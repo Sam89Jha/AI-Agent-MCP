@@ -26,4 +26,9 @@ output "make_call_function_arn" {
 output "get_message_function_arn" {
   description = "ARN of the get-message Lambda function"
   value       = aws_lambda_function.get_message.arn
+}
+
+output "api_gateway_invoke_url" {
+  description = "Base invoke URL for the API Gateway"
+  value = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${var.aws_region}.amazonaws.com/prod"
 } 

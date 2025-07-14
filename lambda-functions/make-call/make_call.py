@@ -18,7 +18,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         logger.info(f"Received call event: {json.dumps(event)}")
-        
+        # Parse body if present (API Gateway proxy integration)
+        if 'body' in event and isinstance(event['body'], str):
+            try:
+                body = json.loads(event['body'])
+                event.update(body)
+            except Exception:
+                pass
         # Check if this is a WebSocket event
         if 'requestContext' in event and 'routeKey' in event.get('requestContext', {}):
             return handle_websocket_event(event, context)

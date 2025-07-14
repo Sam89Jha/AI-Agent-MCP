@@ -15,12 +15,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         logger.info(f"Received event: {json.dumps(event)}")
-        
-        # Extract booking code and pagination parameters
-        booking_code = event.get('booking_code')
-        limit = event.get('limit', 50)
-        start_key = event.get('start_key')
-        
+        # Only accept booking_code from queryStringParameters (GET query param)
+        booking_code = None
+        qsp = event.get('queryStringParameters')
+        if qsp and isinstance(qsp, dict):
+            booking_code = qsp.get('booking_code')
+        # Extract pagination parameters (optional, from query params)
+        limit = 50
+        start_key = None
+        if qsp and isinstance(qsp, dict):
+            if 'limit' in qsp:
+                try:
+                    limit = int(qsp['limit'])
+                except Exception:
+                    pass
+            if 'start_key' in qsp:
+                start_key = qsp['start_key']
         if not booking_code:
             return {
                 'statusCode': 400,
@@ -29,12 +39,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'error': 'Missing required field: booking_code'
                 })
             }
-        
         # Get messages from in-memory cache
         result = cache.get_messages(booking_code, limit, start_key)
-        
         logger.info(f"Retrieved {result['count']} messages from cache for booking {booking_code}")
-        
         return {
             'statusCode': 200,
             'body': json.dumps({
@@ -48,7 +55,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
             })
         }
-        
     except Exception as e:
         logger.error(f"Lambda error: {str(e)}")
         return {
