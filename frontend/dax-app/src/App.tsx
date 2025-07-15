@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FaMicrophone, 
   FaMicrophoneSlash, 
-  FaPaperPlane, 
   FaPhone,
   FaUser,
   FaCar
@@ -194,549 +193,271 @@ const Avatar = styled.div<{ $type: 'driver' | 'passenger' | 'ai' }>`
   font-weight: bold;
 `;
 
-const InputContainer = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
+const VoiceControlContainer = styled.div`
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
-  border-radius: 25px;
-  padding: 0.5rem;
+  border-radius: 15px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
 `;
 
-const TextInput = styled.input`
-  flex: 1;
-  padding: 0.75rem 1rem;
-  border: none;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 1rem;
-  outline: none;
-  
-  &:focus {
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-  }
-`;
-
-const Button = styled(motion.button)`
-  width: 44px;
-  height: 44px;
-  border: none;
+const VoiceButton = styled(motion.button)<{ $isListening: boolean }>`
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
+  border: none;
+  background: ${props => props.$isListening ? 'rgba(255, 100, 100, 0.9)' : 'rgba(255, 255, 255, 0.9)'};
+  color: ${props => props.$isListening ? 'white' : '#333'};
+  font-size: 2rem;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   
   &:hover {
-    background: rgba(255, 255, 255, 1);
     transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
   }
   
   &:active {
     transform: scale(0.95);
   }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const VoiceButton = styled(Button)<{ $isListening: boolean }>`
-  background: ${props => props.$isListening ? 'rgba(255, 100, 100, 0.9)' : 'rgba(255, 255, 255, 0.9)'};
-  color: ${props => props.$isListening ? 'white' : '#333'};
 `;
 
 const StatusMessage = styled.div`
-  text-align: center;
-  color: white;
-  font-size: 0.9rem;
-  opacity: 0.8;
-  margin: 0.5rem 0;
-`;
-
-const CallIndicator = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 100, 100, 0.2);
-  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
   border-radius: 10px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  text-align: center;
   color: white;
   font-size: 0.9rem;
 `;
 
-const CallOverlay = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+const CallControls = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
-
-const CallCard = styled.div`
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  padding: 2rem;
-  text-align: center;
-  max-width: 400px;
-  width: 90%;
-`;
-
-const CallStatus = styled.div<{ $status: string }>`
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: ${props => {
-    switch (props.$status) {
-      case 'calling': return '#ff6b6b';
-      case 'ringing': return '#4ecdc4';
-      case 'connected': return '#45b7d1';
-      default: return '#333';
-    }
-  }};
-  margin-bottom: 1rem;
-`;
-
-const CallDuration = styled.div`
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #333;
-  margin: 1rem 0;
-`;
-
-const CallButtons = styled.div`
-  display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   justify-content: center;
   margin-top: 1rem;
 `;
 
-const CallButton = styled.button<{ $type: 'accept' | 'reject' | 'end' }>`
-  width: 60px;
-  height: 60px;
+const CallButton = styled.button<{ $variant: 'accept' | 'reject' | 'end' | 'cancel' }>`
+  padding: 0.5rem 1rem;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
   background: ${props => {
-    switch (props.$type) {
-      case 'accept': return '#4ecdc4';
-      case 'reject': return '#ff6b6b';
-      case 'end': return '#ff6b6b';
+    switch (props.$variant) {
+      case 'accept': return 'rgba(76, 175, 80, 0.9)';
+      case 'reject': return 'rgba(244, 67, 54, 0.9)';
+      case 'end': return 'rgba(255, 152, 0, 0.9)';
+      case 'cancel': return 'rgba(158, 158, 158, 0.9)';
+      default: return 'rgba(255, 255, 255, 0.9)';
     }
   }};
+  
   color: white;
-  font-size: 1.5rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   
   &:hover {
-    transform: scale(1.1);
+    transform: scale(1.05);
   }
 `;
 
-// App Component
-const App: React.FC = () => {
-  const [bookingCode, setBookingCode] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState<string>('');
-  const [isListening, setIsListening] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [recognition, setRecognition] = useState<VoiceRecognition | null>(null);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'connected' | 'ended'>('idle');
-  const [callDuration, setCallDuration] = useState(0);
-  const [callButtons, setCallButtons] = useState<('accept' | 'reject' | 'end' | 'cancel')[]>([]);
+const CallDuration = styled.div`
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: white;
+  margin: 1rem 0;
+`;
+
+const ConnectButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
   
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const connectionRef = useRef({ isConnected: false, bookingCode: '' });
-  const websocketRef = useRef<WebSocket | null>(null);
+  &:hover {
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.02);
+  }
+`;
+
+const VoiceInstructions = styled.div`
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  color: white;
+  font-size: 0.9rem;
+  text-align: center;
+`;
+
+const App: React.FC = () => {
+  // State
+  const [bookingCode, setBookingCode] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('Enter booking code to start');
+  const [callState, setCallState] = useState<'idle' | 'calling' | 'connected' | 'ended'>('idle');
+  const [callDuration, setCallDuration] = useState(0);
+  const [callButtons, setCallButtons] = useState<string[]>([]);
+  
+  // Refs
+  const recognition = useRef<VoiceRecognition | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionRef = useRef({ isConnected: false, bookingCode: '' });
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize speech recognition
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
     if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      recognition.current = new SpeechRecognition();
+      recognition.current.continuous = false;
+      recognition.current.interimResults = false;
+      recognition.current.lang = 'en-US';
       
-      recognition.onstart = () => {
+      recognition.current.onstart = () => {
         setIsListening(true);
-        setStatusMessage('Listening...');
+        setStatusMessage('Listening... Speak now!');
       };
       
-      recognition.onend = () => {
+      recognition.current.onend = () => {
         setIsListening(false);
-        setStatusMessage('');
+        setStatusMessage('Voice recognition ended');
       };
       
-      recognition.onerror = (event) => {
+      recognition.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
-        console.error('Error details:', event);
         setIsListening(false);
-        setStatusMessage(`Voice recognition error: ${event.error}. Please try again.`);
+        setStatusMessage(`Voice recognition error: ${event.error}`);
       };
       
-      recognition.onresult = (event) => {
-        console.log('Speech recognition result:', event);
-        console.log('Results length:', event.results.length);
-        
-        if (event.results.length > 0) {
-          const result = event.results[0];
-          console.log('First result:', result);
-          
-          // Try different ways to access transcript
-          let transcript = null;
-          
-          // Method 1: Direct transcript property
-          if (result.transcript) {
-            transcript = result.transcript;
-            console.log('Found transcript via result.transcript');
-          }
-          // Method 2: Access via index if it's an array-like object
-          else if ((result as any)[0] && (result as any)[0].transcript) {
-            transcript = (result as any)[0].transcript;
-            console.log('Found transcript via result[0].transcript');
-          }
-          // Method 3: Try to access the first item
-          else if (typeof (result as any).item === 'function') {
-            const firstItem = (result as any).item(0);
-            if (firstItem && firstItem.transcript) {
-              transcript = firstItem.transcript;
-              console.log('Found transcript via result.item(0).transcript');
-            }
-          }
-          // Method 4: Try to iterate through results
-          else {
-            for (let i = 0; i < (result as any).length; i++) {
-              const item = (result as any)[i];
-              if (item && item.transcript) {
-                transcript = item.transcript;
-                console.log(`Found transcript via result[${i}].transcript`);
-                break;
-              }
-            }
-          }
-          
-          if (transcript) {
-            console.log('Voice transcript:', transcript);
-            
-            // Check if connected before processing voice command
-            console.log('🔍 DEBUG: Connection check - isConnected:', connectionRef.current.isConnected, 'bookingCode:', connectionRef.current.bookingCode);
-            if (!connectionRef.current.isConnected || !connectionRef.current.bookingCode) {
-              console.log('❌ DEBUG: Voice recognition triggered but not connected');
-              setStatusMessage('Please connect to a booking first by entering the booking code.');
-              return;
-            }
-            
-            setStatusMessage('Processing voice command...');
-            
-            // Use AI agent to process voice command with current booking code
-            processVoiceCommand(transcript);
-          } else {
-            console.log('No transcript found in any method');
-            console.log('Available properties:', Object.keys(result));
-            setStatusMessage('No speech detected. Please try again.');
-          }
-        } else {
-          console.log('No results in event');
-          setStatusMessage('No speech detected. Please try again.');
-        }
+      recognition.current.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = event.results.item(0).transcript;
+        console.log('🎤 Voice input:', transcript);
+        setStatusMessage(`Processing: "${transcript}"`);
+        processVoiceCommand(transcript);
       };
-      
-      setRecognition(recognition);
     } else {
-      setStatusMessage('Voice recognition not supported in this browser.');
+      setStatusMessage('Speech recognition not supported in this browser');
     }
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Update connection ref when state changes
+  useEffect(() => {
+    connectionRef.current = { isConnected, bookingCode };
+  }, [isConnected, bookingCode]);
+
+  // Auto-scroll chat to bottom
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // WebSocket connection for real-time call updates
-  useEffect(() => {
-    if (isConnected && bookingCode) {
-      const wsUrl = CONFIG.getWebsocketUrlForBooking(bookingCode);
-      const ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        console.log('🔌 WebSocket connected for calls');
-      };
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('📨 WebSocket message received:', data);
-        
-        if (data.type === 'call_state_update') {
-          // Handle call state updates from Lambda
-          const { call_state, user_type, message, show_buttons } = data;
-          
-          setCallState(call_state);
-          setStatusMessage(message);
-          
-          // Update call buttons based on user type and state
-          if (call_state === 'calling' && user_type === 'driver') {
-            // Driver is calling - show cancel button
-            setCallButtons(['cancel']);
-          } else if (call_state === 'ringing' && user_type === 'driver') {
-            // Driver is being called - show accept/reject buttons
-            setCallButtons(['accept', 'reject']);
-          } else if (call_state === 'connected') {
-            // Call is connected - show end button for both
-            setCallButtons(['end']);
-          } else if (call_state === 'ended') {
-            // Call ended - no buttons
-            setCallButtons([]);
-            setTimeout(() => {
-              setCallState('idle');
-              setCallDuration(0);
-            }, 2000);
-          }
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-      };
-      
-      websocketRef.current = ws;
-      
-      return () => {
-        ws.close();
-      };
-    }
-  }, [isConnected, bookingCode]);
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
-
   // Connect to booking
   const connectToBooking = async () => {
-    if (!(bookingCode || '').trim()) {
-      setStatusMessage('Please enter a booking code.');
+    if (!bookingCode.trim()) {
+      setStatusMessage('Please enter a booking code');
       return;
     }
 
     try {
       setStatusMessage('Connecting to booking...');
       
-      // Test connection by getting messages
-      const response = await axios.get(`${API_ENDPOINTS.GET_MESSAGES}/${bookingCode}`);
+      // Test AI Intent API health
+      const healthResponse = await axios.get(API_ENDPOINTS.HEALTH_CHECK);
+      console.log('✅ AI Intent API health check:', healthResponse.data);
       
-      if (response.data.success) {
-        setIsConnected(true);
-        setMessages(response.data.data.messages || []);
-        setStatusMessage('Connected successfully!');
-        
-        // Update connection ref
-        connectionRef.current = { isConnected: true, bookingCode: bookingCode };
-        
-        // Add welcome message
-        const welcomeMessage: Message = {
-          id: Date.now().toString(),
-          text: `Welcome to booking ${bookingCode}! How can I help you today?`,
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'text'
-        };
-        setMessages(prev => [...prev, welcomeMessage]);
-      }
-    } catch (error) {
+      setIsConnected(true);
+      setStatusMessage(`Connected to booking: ${bookingCode}`);
+      
+      // Add connection message
+      const connectionMessage: Message = {
+        id: Date.now().toString(),
+        text: `Connected to booking: ${bookingCode}`,
+        sender: 'ai',
+        timestamp: new Date().toISOString(),
+        type: 'text'
+      };
+      setMessages([connectionMessage]);
+      
+    } catch (error: any) {
       console.error('Connection error:', error);
-      setStatusMessage('Failed to connect. Please check your booking code.');
+      setStatusMessage('Failed to connect. Please check the booking code and try again.');
     }
   };
 
-  // Send message
-  const sendMessage = async () => {
-    console.log('Send message called with inputText:', inputText);
-    if (!(inputText || '').trim() || !isConnected) {
-      console.log('Send message blocked - inputText:', inputText, 'isConnected:', isConnected);
-      return;
-    }
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: 'driver',
-      timestamp: new Date().toISOString(),
-      type: 'text'
-    };
-
-    console.log('Adding message to UI:', newMessage);
-    setMessages(prev => [...prev, newMessage]);
-    setInputText('');
-    setStatusMessage('Sending message...');
-
-    try {
-      const response = await axios.post(API_ENDPOINTS.SEND_MESSAGE, {
-        booking_code: bookingCode,
-        message: inputText,
-        sender: 'driver'
-      });
-
-      if (response.data.success) {
-        setStatusMessage('Message sent successfully!');
-        
-        // Add AI response
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          text: 'Message sent successfully. The passenger will be notified.',
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'text'
-        };
-        setMessages(prev => [...prev, aiResponse]);
-      }
-    } catch (error) {
-      console.error('Send message error:', error);
-      setStatusMessage('Failed to send message. Please try again.');
-    }
-  };
-
-  // Make call
-  const makeCall = async () => {
-    if (!isConnected) return;
-
-    setStatusMessage('Initiating call...');
-    setCallState('calling');
-    setCallButtons(['cancel']);
-
-    try {
-      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
-        booking_code: bookingCode,
-        caller_type: 'driver',
-        call_type: 'voice',
-        action: 'initiate',
-        duration: 0
-      });
-
-      if (response.data.success) {
-        const callMessage: Message = {
-          id: Date.now().toString(),
-          text: 'Call initiated successfully',
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'call',
-          callDetails: {
-            duration: 0,
-            status: 'initiated'
-          }
-        };
-        setMessages(prev => [...prev, callMessage]);
-        setStatusMessage('Calling passenger...');
-      }
-    } catch (error) {
-      console.error('Make call error:', error);
-      setStatusMessage('Failed to initiate call. Please try again.');
-      setCallState('idle');
-      setCallButtons([]);
-    }
-  };
-
-  // Start voice recognition
-  const startListening = () => {
+  // Process voice command using AI Intent API
+  const processVoiceCommand = async (transcript: string) => {
+    console.log('🔍 Processing voice command:', transcript);
+    
     if (!isConnected || !bookingCode) {
       setStatusMessage('Please connect to a booking first by entering the booking code.');
       return;
     }
-    
-    if (recognition && !isListening) {
-      recognition.start();
-    }
-  };
 
-  // Process voice command using AI agent
-  const processVoiceCommand = async (transcript: string) => {
-    console.log('🔍 DEBUG: processVoiceCommand called with:', transcript);
-    console.log('🔍 DEBUG: isConnected:', connectionRef.current.isConnected, 'bookingCode:', connectionRef.current.bookingCode);
-    
-    // Only process voice commands if already connected
-    if (!connectionRef.current.isConnected || !connectionRef.current.bookingCode) {
-      console.log('❌ DEBUG: Not connected to booking');
-      setStatusMessage('Please connect to a booking first by entering the booking code.');
-      return;
-    }
-
-    // If connected, process with AI
-    await processVoiceCommandWithAI(transcript, connectionRef.current.bookingCode);
-  };
-
-  // Helper function to process voice command with AI
-  const processVoiceCommandWithAI = async (transcript: string, bookingCode: string) => {
     try {
-      console.log('🚀 DEBUG: Sending to AI agent endpoint:', API_ENDPOINTS.AI_AGENT);
-      console.log('📤 DEBUG: Request payload:', {
+      console.log('🚀 Sending to AI Intent API:', API_ENDPOINTS.AI_INTENT_API);
+      console.log('📤 Request payload:', {
         booking_code: bookingCode,
         user_input: transcript,
         user_type: 'driver'
       });
       
-      const response = await axios.post(API_ENDPOINTS.AI_AGENT, {
+      const response = await axios.post(API_ENDPOINTS.AI_INTENT_API, {
         booking_code: bookingCode,
         user_input: transcript,
         user_type: 'driver'
       });
 
-      console.log('📥 DEBUG: AI agent response:', response.data);
+      console.log('📥 AI Intent API response:', response.data);
 
       if (response.data.success) {
-        console.log('✅ DEBUG: AI agent success');
-        console.log('📝 DEBUG: Original transcript:', transcript);
-        console.log('📝 DEBUG: Extracted message:', response.data.data.text);
+        console.log('✅ AI Intent API success');
         
-        // Check if this is a call command
-        if (response.data.data.type === 'call') {
-          console.log('📞 DEBUG: Call command detected');
+        // Add AI response to chat
+        const aiMessage: Message = {
+          id: Date.now().toString(),
+          text: response.data.response,
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+          type: 'text'
+        };
+        
+        console.log('💬 Adding AI message to chat:', aiMessage);
+        setMessages(prev => [...prev, aiMessage]);
+        setStatusMessage('Voice command processed successfully!');
+        
+        // Handle call commands
+        if (response.data.intent === 'make-call') {
           handleCallCommand();
-        } else {
-          // Add AI response to chat
-          const aiMessage: Message = {
-            id: Date.now().toString(),
-            text: `AI processed: "${transcript}" → "${response.data.data.text}"`,
-            sender: 'ai',
-            timestamp: new Date().toISOString(),
-            type: 'text'
-          };
-          
-          console.log('💬 DEBUG: Adding AI message to chat:', aiMessage);
-          setMessages(prev => [...prev, aiMessage]);
-          setStatusMessage('Voice command processed successfully!');
         }
       } else {
-        console.log('❌ DEBUG: AI agent returned success: false');
+        console.log('❌ AI Intent API returned success: false');
+        setStatusMessage('Failed to process voice command. Please try again.');
       }
     } catch (error: any) {
-      console.error('💥 DEBUG: AI agent error:', error);
-      console.error('💥 DEBUG: Error details:', {
+      console.error('💥 AI Intent API error:', error);
+      console.error('💥 Error details:', {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status
@@ -747,31 +468,46 @@ const App: React.FC = () => {
 
   // Handle call command
   const handleCallCommand = () => {
-    // Reset call state and duration
     setCallState('calling');
     setCallDuration(0);
     setCallButtons(['cancel']);
     setStatusMessage('Initiating call...');
     
-    // Call the make_call API
-    makeCall();
+    // Add call message
+    const callMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Initiating call...',
+      sender: 'ai',
+      timestamp: new Date().toISOString(),
+      type: 'call'
+    };
+    setMessages(prev => [...prev, callMessage]);
+  };
+
+  // Start voice recognition
+  const startListening = () => {
+    if (!isConnected || !bookingCode) {
+      setStatusMessage('Please connect to a booking first by entering the booking code.');
+      return;
+    }
+    
+    if (recognition.current && !isListening) {
+      recognition.current.start();
+    }
   };
 
   // Start call timer
   const startCallTimer = () => {
-    // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
     
-    // Reset duration
     setCallDuration(0);
     
     const interval = setInterval(() => {
       setCallDuration(prev => prev + 1);
     }, 1000);
     
-    // Store interval ID for cleanup
     timerRef.current = interval;
     
     return () => clearInterval(interval);
@@ -779,7 +515,6 @@ const App: React.FC = () => {
 
   // End call
   const endCall = async () => {
-    // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -789,33 +524,18 @@ const App: React.FC = () => {
     setStatusMessage(`Call ended - Duration: ${callDuration} seconds`);
     setCallButtons([]);
     
-    // Call the make_call API to end the call
-    try {
-      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
-        booking_code: bookingCode,
-        caller_type: 'driver',
-        call_type: 'voice',
-        action: 'end',
-        duration: callDuration
-      });
-
-      if (response.data.success) {
-        const callMessage: Message = {
-          id: Date.now().toString(),
-          text: `Call ended - Duration: ${callDuration} seconds`,
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'call',
-          callDetails: {
-            duration: callDuration,
-            status: 'ended'
-          }
-        };
-        setMessages(prev => [...prev, callMessage]);
+    const callMessage: Message = {
+      id: Date.now().toString(),
+      text: `Call ended - Duration: ${callDuration} seconds`,
+      sender: 'ai',
+      timestamp: new Date().toISOString(),
+      type: 'call',
+      callDetails: {
+        duration: callDuration,
+        status: 'ended'
       }
-    } catch (error) {
-      console.error('End call error:', error);
-    }
+    };
+    setMessages(prev => [...prev, callMessage]);
     
     setTimeout(() => {
       setCallState('idle');
@@ -830,33 +550,18 @@ const App: React.FC = () => {
     setCallButtons(['end']);
     startCallTimer();
     
-    // Call the make_call API to accept the call
-    try {
-      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
-        booking_code: bookingCode,
-        caller_type: 'driver',
-        call_type: 'voice',
-        action: 'accept',
-        duration: 0
-      });
-
-      if (response.data.success) {
-        const callMessage: Message = {
-          id: Date.now().toString(),
-          text: 'Call accepted',
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'call',
-          callDetails: {
-            duration: 0,
-            status: 'connected'
-          }
-        };
-        setMessages(prev => [...prev, callMessage]);
+    const callMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Call accepted',
+      sender: 'ai',
+      timestamp: new Date().toISOString(),
+      type: 'call',
+      callDetails: {
+        duration: 0,
+        status: 'connected'
       }
-    } catch (error) {
-      console.error('Accept call error:', error);
-    }
+    };
+    setMessages(prev => [...prev, callMessage]);
   };
 
   // Reject call
@@ -865,37 +570,21 @@ const App: React.FC = () => {
     setStatusMessage('Call rejected');
     setCallButtons([]);
     
-    // Call the make_call API to reject the call
-    try {
-      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
-        booking_code: bookingCode,
-        caller_type: 'driver',
-        call_type: 'voice',
-        action: 'reject',
-        duration: 0
-      });
-
-      if (response.data.success) {
-        const callMessage: Message = {
-          id: Date.now().toString(),
-          text: 'Call rejected',
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'call',
-          callDetails: {
-            duration: 0,
-            status: 'rejected'
-          }
-        };
-        setMessages(prev => [...prev, callMessage]);
+    const callMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Call rejected',
+      sender: 'ai',
+      timestamp: new Date().toISOString(),
+      type: 'call',
+      callDetails: {
+        duration: 0,
+        status: 'rejected'
       }
-    } catch (error) {
-      console.error('Reject call error:', error);
-    }
+    };
+    setMessages(prev => [...prev, callMessage]);
     
     setTimeout(() => {
       setCallState('idle');
-      setCallDuration(0);
     }, 2000);
   };
 
@@ -905,76 +594,41 @@ const App: React.FC = () => {
     setStatusMessage('Call cancelled');
     setCallButtons([]);
     
-    // Call the make_call API to end the call
-    try {
-      const response = await axios.post(API_ENDPOINTS.MAKE_CALL, {
-        booking_code: bookingCode,
-        caller_type: 'driver',
-        call_type: 'voice',
-        action: 'end',
-        duration: 0
-      });
-
-      if (response.data.success) {
-        const callMessage: Message = {
-          id: Date.now().toString(),
-          text: 'Call cancelled',
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          type: 'call',
-          callDetails: {
-            duration: 0,
-            status: 'cancelled'
-          }
-        };
-        setMessages(prev => [...prev, callMessage]);
+    const callMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Call cancelled',
+      sender: 'ai',
+      timestamp: new Date().toISOString(),
+      type: 'call',
+      callDetails: {
+        duration: 0,
+        status: 'cancelled'
       }
-    } catch (error) {
-      console.error('Cancel call error:', error);
-    }
+    };
+    setMessages(prev => [...prev, callMessage]);
     
     setTimeout(() => {
       setCallState('idle');
-      setCallDuration(0);
     }, 2000);
   };
 
-  // Handle key press
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+  // Format time
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
-  // Poll for new messages
-  useEffect(() => {
-    if (!isConnected || !bookingCode) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await axios.get(`${API_ENDPOINTS.GET_MESSAGES}/${bookingCode}`);
-        if (response.data.success) {
-          const newMessages = response.data.data.messages || [];
-          setMessages(newMessages);
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 3000); // Poll every 3 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [isConnected, bookingCode]);
 
   return (
     <AppContainer>
       <Header>
-        <Title>DAX - Driver Assistant</Title>
-        <Subtitle>AI-powered chat and voice assistant</Subtitle>
+        <Title>🚗 DAX - Driver Assistant</Title>
+        <Subtitle>Voice-Controlled Communication</Subtitle>
       </Header>
 
       <MainContent>
-        {!isConnected ? (
+        {/* Booking Code Input */}
+        {!isConnected && (
           <BookingCodeInput>
             <Input
               type="text"
@@ -983,147 +637,117 @@ const App: React.FC = () => {
               onChange={(e) => setBookingCode(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && connectToBooking()}
             />
-            <Button
+            <ConnectButton onClick={connectToBooking}>
+              Connect
+            </ConnectButton>
+          </BookingCodeInput>
+        )}
+
+        {/* Voice Instructions */}
+        {isConnected && (
+          <VoiceInstructions>
+            <strong>🎤 Voice Commands Available:</strong><br/>
+            • "Send a message to the passenger saying..."<br/>
+            • "Call the passenger"<br/>
+            • "Show me the message history"<br/>
+            • "Get recent messages"
+          </VoiceInstructions>
+        )}
+
+        {/* Status Message */}
+        <StatusMessage>{statusMessage}</StatusMessage>
+
+        {/* Chat Container */}
+        <ChatContainer ref={chatContainerRef}>
+          <AnimatePresence>
+            {messages.map((message) => (
+              <MessageBubble
+                key={message.id}
+                $isOwn={message.sender === 'driver'}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Avatar $type={message.sender}>
+                  {message.sender === 'driver' ? <FaCar /> : 
+                   message.sender === 'passenger' ? <FaUser /> : '🤖'}
+                </Avatar>
+                <div>
+                  <MessageContent $isOwn={message.sender === 'driver'}>
+                    {message.text}
+                  </MessageContent>
+                  <MessageTime>
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                  </MessageTime>
+                </div>
+              </MessageBubble>
+            ))}
+          </AnimatePresence>
+        </ChatContainer>
+
+        {/* Voice Control */}
+        {isConnected && (
+          <VoiceControlContainer>
+            <VoiceButton
+              $isListening={isListening}
+              onClick={startListening}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={connectToBooking}
             >
-              Connect
-            </Button>
-          </BookingCodeInput>
-        ) : (
-          <>
-            <ChatContainer ref={chatContainerRef}>
-              <AnimatePresence>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    $isOwn={message.sender === 'driver'}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {message.sender !== 'driver' && (
-                      <Avatar $type={message.sender}>
-                        {message.sender === 'passenger' ? <FaUser /> : <FaCar />}
-                      </Avatar>
-                    )}
-                    <div>
-                      <MessageContent $isOwn={message.sender === 'driver'}>
-                        {message.type === 'call' ? (
-                          <CallIndicator>
-                            <FaPhone />
-                            {message.text}
-                          </CallIndicator>
-                        ) : (
-                          message.text
-                        )}
-                      </MessageContent>
-                      <MessageTime>
-                        {new Date(message.timestamp).toLocaleTimeString()}
-                      </MessageTime>
-                    </div>
-                    {message.sender === 'driver' && (
-                      <Avatar $type={message.sender}>
-                        <FaCar />
-                      </Avatar>
-                    )}
-                  </MessageBubble>
-                ))}
-              </AnimatePresence>
-            </ChatContainer>
-
-            <InputContainer>
-              <TextInput
-                ref={inputRef}
-                type="text"
-                placeholder="Type a message or use voice..."
-                value={inputText || ''}
-                onChange={(e) => setInputText(e.target.value || '')}
-                onKeyPress={handleKeyPress}
-                disabled={!isConnected}
-              />
-              <VoiceButton
-                $isListening={isListening}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={startListening}
-                disabled={!isConnected || isListening}
-              >
-                {isListening ? <FaMicrophoneSlash /> : <FaMicrophone />}
-              </VoiceButton>
-              <Button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={sendMessage}
-                disabled={!(inputText || '').trim() || !isConnected}
-              >
-                <FaPaperPlane />
-              </Button>
-              <Button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={makeCall}
-                disabled={!isConnected}
-              >
-                <FaPhone />
-              </Button>
-            </InputContainer>
-          </>
-        )}
-
-        {statusMessage && (
-          <StatusMessage>{statusMessage}</StatusMessage>
-        )}
-      </MainContent>
-
-      {/* Call Overlay */}
-      {callState !== 'idle' && (
-        <CallOverlay
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <CallCard>
-            <CallStatus $status={callState}>
-              {callState === 'calling' && 'Calling...'}
-              {callState === 'ringing' && 'Ringing...'}
-              {callState === 'connected' && 'Connected'}
-              {callState === 'ended' && 'Call Ended'}
-            </CallStatus>
+              {isListening ? <FaMicrophoneSlash /> : <FaMicrophone />}
+            </VoiceButton>
             
+            {isListening && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                style={{ color: 'white', textAlign: 'center' }}
+              >
+                🎤 Listening... Speak now!
+              </motion.div>
+            )}
+          </VoiceControlContainer>
+        )}
+
+        {/* Call Controls */}
+        {callState !== 'idle' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ textAlign: 'center' }}
+          >
             {callState === 'connected' && (
               <CallDuration>
-                {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
+                📞 {formatTime(callDuration)}
               </CallDuration>
             )}
             
-            <CallButtons>
-              {callButtons.includes('cancel') && (
-                <CallButton $type="end" onClick={cancelCall}>
-                  <FaMicrophoneSlash />
-                </CallButton>
-              )}
+            <CallControls>
               {callButtons.includes('accept') && (
-                <CallButton $type="accept" onClick={acceptCall}>
-                  <FaPhone />
+                <CallButton $variant="accept" onClick={acceptCall}>
+                  Accept
                 </CallButton>
               )}
               {callButtons.includes('reject') && (
-                <CallButton $type="reject" onClick={rejectCall}>
-                  <FaMicrophoneSlash />
+                <CallButton $variant="reject" onClick={rejectCall}>
+                  Reject
                 </CallButton>
               )}
               {callButtons.includes('end') && (
-                <CallButton $type="end" onClick={endCall}>
-                  <FaMicrophoneSlash />
+                <CallButton $variant="end" onClick={endCall}>
+                  End
                 </CallButton>
               )}
-            </CallButtons>
-          </CallCard>
-        </CallOverlay>
-      )}
+              {callButtons.includes('cancel') && (
+                <CallButton $variant="cancel" onClick={cancelCall}>
+                  Cancel
+                </CallButton>
+              )}
+            </CallControls>
+          </motion.div>
+        )}
+      </MainContent>
     </AppContainer>
   );
 };

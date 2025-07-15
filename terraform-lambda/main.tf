@@ -473,3 +473,162 @@ resource "aws_apigatewayv2_stage" "websocket" {
   name   = "prod"
   auto_deploy = true
 } 
+
+# =============================================================================
+# MCP SERVER EC2 INSTANCE
+# =============================================================================
+
+# Data sources for EC2
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+}
+
+# Security Group for MCP Server
+resource "aws_security_group" "mcp_server" {
+  name        = "mcp-server-sg"
+  description = "Security group for MCP server"
+  vpc_id      = data.aws_vpc.default.id
+
+  # SSH access
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTP access
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTPS access
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # MCP Server port
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # All outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "mcp-server-sg"
+  }
+}
+
+# IAM Role for EC2
+resource "aws_iam_role" "ec2_role" {
+  name = "ec2_mcp_server_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM Policy for EC2 to call Lambda
+resource "aws_iam_role_policy" "ec2_lambda" {
+  name = "ec2_lambda_policy"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = [
+          aws_lambda_function.send_message.arn,
+          aws_lambda_function.make_call.arn,
+          aws_lambda_function.get_message.arn,
+          aws_lambda_function.websocket_register.arn
+        ]
+      }
+    ]
+  })
+}
+
+# CloudWatch Logs policy for EC2
+resource "aws_iam_role_policy_attachment" "ec2_logs" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# IAM Instance Profile
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "ec2_mcp_server_profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# EC2 Instance for MCP Server
+resource "aws_instance" "mcp_server" {
+  ami                    = data.aws_ami.amazon_linux_2023.id
+  instance_type          = "t3.micro"
+  key_name               = var.ec2_key_name
+  vpc_security_group_ids = [aws_security_group.mcp_server.id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+
+  user_data = base64encode(templatefile("${path.module}/mcp_user_data.sh", {
+    region = var.aws_region
+    api_gateway_url = aws_api_gateway_stage.main.invoke_url
+    websocket_url = aws_apigatewayv2_stage.websocket.invoke_url
+  }))
+
+  root_block_device {
+    volume_size = 8
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name = "mcp-server"
+  }
+}
+
+# Elastic IP for MCP Server
+resource "aws_eip" "mcp_server" {
+  instance = aws_instance.mcp_server.id
+  domain   = "vpc"
+
+  tags = {
+    Name = "mcp-server-eip"
+  }
+} 

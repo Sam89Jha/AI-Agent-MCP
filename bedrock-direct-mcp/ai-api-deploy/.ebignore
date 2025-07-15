@@ -1,0 +1,10 @@
+*.pyc
+__pycache__/
+*.log
+.env
+.git/
+.terraform/
+*.tfstate*
+test_*.py
+deploy_*.sh
+README.md

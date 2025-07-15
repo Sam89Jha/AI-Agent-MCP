@@ -476,10 +476,15 @@ const App: React.FC = () => {
 
     const pollInterval = setInterval(async () => {
       try {
-        const response = await axios.get(`/api/v1/get_message/${bookingCode}`);
+        const response = await axios.get(`${API_ENDPOINTS.GET_MESSAGES}/${bookingCode}`);
         if (response.data.success) {
           const newMessages = response.data.data.messages || [];
-          setMessages(newMessages);
+          // Merge messages instead of overwriting
+          setMessages(prevMessages => {
+            const existingIds = new Set(prevMessages.map((m: Message) => m.id));
+            const uniqueNewMessages = newMessages.filter((m: any) => !existingIds.has(m.id));
+            return [...prevMessages, ...uniqueNewMessages];
+          });
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -487,6 +492,80 @@ const App: React.FC = () => {
     }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(pollInterval);
+  }, [isConnected, bookingCode]);
+
+  // WebSocket connection for real-time call updates
+  useEffect(() => {
+    if (isConnected && bookingCode) {
+      const wsUrl = CONFIG.getWebsocketUrlForBooking(bookingCode);
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('🔌 WebSocket connected for calls');
+        // Register WebSocket connection with Lambda
+        ws.send(JSON.stringify({
+          action: 'register',
+          booking_code: bookingCode,
+          user_type: 'passenger'
+        }));
+      };
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('📨 WebSocket message received:', data);
+        
+        if (data.type === 'call_state_update') {
+          // Handle call state updates from Lambda
+          const { call_state, user_type, message, show_buttons } = data;
+          
+          setCallState(call_state);
+          setStatusMessage(message);
+          
+          // Update call buttons based on user type and state
+          if (call_state === 'calling' && user_type === 'passenger') {
+            // Passenger is calling - show cancel button
+            setCallButtons(['cancel']);
+          } else if (call_state === 'ringing' && user_type === 'passenger') {
+            // Passenger is being called - show accept/reject buttons
+            setCallButtons(['accept', 'reject']);
+          } else if (call_state === 'connected') {
+            // Call is connected - show end button for both
+            setCallButtons(['end']);
+          } else if (call_state === 'ended') {
+            // Call ended - no buttons
+            setCallButtons([]);
+            setTimeout(() => {
+              setCallState('idle');
+              setCallDuration(0);
+            }, 2000);
+          }
+        } else if (data.type === 'message') {
+          // Handle incoming messages
+          const newMessage: Message = {
+            id: data.id || Date.now().toString(),
+            text: data.message,
+            sender: data.sender,
+            timestamp: data.timestamp || new Date().toISOString(),
+            type: 'text'
+          };
+          setMessages(prev => [...prev, newMessage]);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+      };
+      
+      websocketRef.current = ws;
+      
+      return () => {
+        ws.close();
+      };
+    }
   }, [isConnected, bookingCode]);
 
   // Connect to booking
@@ -893,64 +972,6 @@ const App: React.FC = () => {
     }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(pollInterval);
-  }, [isConnected, bookingCode]);
-
-  // WebSocket connection for real-time call updates
-  useEffect(() => {
-    if (isConnected && bookingCode) {
-      const wsUrl = CONFIG.getWebsocketUrlForBooking(bookingCode);
-      const ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        console.log('🔌 WebSocket connected for calls');
-      };
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('📨 WebSocket message received:', data);
-        
-        if (data.type === 'call_state_update') {
-          // Handle call state updates from Lambda
-          const { call_state, user_type, message, show_buttons } = data;
-          
-          setCallState(call_state);
-          setStatusMessage(message);
-          
-          // Update call buttons based on user type and state
-          if (call_state === 'calling' && user_type === 'passenger') {
-            // Passenger is calling - show cancel button
-            setCallButtons(['cancel']);
-          } else if (call_state === 'ringing' && user_type === 'passenger') {
-            // Passenger is being called - show accept/reject buttons
-            setCallButtons(['accept', 'reject']);
-          } else if (call_state === 'connected') {
-            // Call is connected - show end button for both
-            setCallButtons(['end']);
-          } else if (call_state === 'ended') {
-            // Call ended - no buttons
-            setCallButtons([]);
-            setTimeout(() => {
-              setCallState('idle');
-              setCallDuration(0);
-            }, 2000);
-          }
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-      };
-      
-      websocketRef.current = ws;
-      
-      return () => {
-        ws.close();
-      };
-    }
   }, [isConnected, bookingCode]);
 
   // Cleanup timers on unmount

@@ -1,0 +1,4 @@
+Agent ID: BXHDRBNNAS
+Alias ID: 
+S3 Bucket: bedrock-agent-schemas-418960606395
+MCP Server URL: http://mcp-server-env.eba-r23dy2pd.us-west-2.elasticbeanstalk.com

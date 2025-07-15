@@ -115,25 +115,16 @@ class APIGatewayClient:
 api_gateway_client = APIGatewayClient()
 
 # Pydantic models
-class MessageRequest(BaseModel):
-    booking_code: str = Field(..., description="Booking code for the conversation")
-    message: str = Field(..., description="Message content")
-    sender: str = Field(..., description="Sender type: 'driver' or 'passenger'")
-    message_type: Optional[str] = Field("text", description="Type of message")
-
-class CallRequest(BaseModel):
-    booking_code: str = Field(..., description="Booking code for the call")
-    caller_type: str = Field(..., description="Caller type: 'driver' or 'passenger'")
-    call_type: str = Field("voice", description="Type of call: 'voice' or 'video'")
-    action: str = Field(..., description="Call action: 'initiate', 'accept', 'reject', 'end'")
-    duration: Optional[int] = Field(0, description="Call duration in seconds")
-
-class AIAgentRequest(BaseModel):
+class UnifiedAPIRequest(BaseModel):
     booking_code: str = Field(..., description="Booking code")
     user_input: str = Field(..., description="User voice/text input")
     user_type: str = Field(..., description="User type: 'driver' or 'passenger'")
     intent: Optional[str] = Field(None, description="Detected intent")
     confidence: Optional[float] = Field(None, description="Intent confidence score")
+    action: Optional[str] = Field(None, description="Action to perform")
+    message_type: Optional[str] = Field("text", description="Type of message")
+    call_type: Optional[str] = Field("voice", description="Type of call")
+    duration: Optional[int] = Field(0, description="Call duration in seconds")
 
 class HealthResponse(BaseModel):
     status: str
@@ -143,16 +134,7 @@ class HealthResponse(BaseModel):
     services: Dict[str, str]
 
 # Health check endpoint
-@app.get("/", response_model=Dict[str, str])
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "MCP Server is running",
-        "status": "healthy",
-        "version": "1.0.0"
-    }
-
-@app.get("/health", response_model=HealthResponse)
+@app.get("/healthcheck", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
     try:
@@ -169,201 +151,49 @@ async def health_check():
         logger.error(f"Health check failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# AI Agent endpoint - main entry point for AI interactions
-@app.post("/api/v1/ai_agent", response_model=Dict[str, Any])
-async def ai_agent_handler(request: AIAgentRequest):
+# Unified API endpoint - main entry point for all interactions
+@app.post("/api/v1/unified-api", response_model=Dict[str, Any])
+async def unified_api_handler(request: UnifiedAPIRequest):
     """
-    Main endpoint for AI Agent interactions.
-    This endpoint receives requests from the AI Agent and routes them to appropriate API Gateway endpoints.
+    Unified API endpoint for all interactions.
+    This endpoint receives requests and routes them to appropriate API Gateway endpoints based on intent or action.
     """
     try:
-        logger.info(f"AI Agent request received: {request.booking_code} - {request.user_input[:50]}...")
+        logger.info(f"Unified API request received: {request.booking_code} - {request.user_input[:50]}...")
         
-        # Determine intent if not provided
+        # Determine the action based on intent or explicit action
+        action = request.action
         intent = request.intent
-        if not intent:
-            intent = _detect_intent(request.user_input)
         
-        logger.info(f"Detected intent: {intent}")
+        if not action and not intent:
+            logger.error("No action or intent provided")
+            raise HTTPException(status_code=400, detail="Action or intent is required")
         
-        # Route based on intent
-        if intent in ["send_message", "message", "send"]:
+        # Use action if provided, otherwise use intent
+        target_action = action if action else intent
+        logger.info(f"Using action/intent: {target_action}")
+        
+        # Route based on action/intent
+        if target_action in ["send_message", "message", "send"]:
             return await _handle_send_message(request)
-        elif intent in ["make_call", "call", "phone"]:
+        elif target_action in ["make_call", "call", "phone"]:
             return await _handle_make_call(request)
-        elif intent in ["get_messages", "messages", "history"]:
+        elif target_action in ["get_messages", "messages", "history"]:
             return await _handle_get_messages(request)
         else:
-            # Default to send message if intent unclear
-            return await _handle_send_message(request)
+            logger.error(f"Unknown action/intent: {target_action}")
+            raise HTTPException(status_code=400, detail=f"Unknown action/intent: {target_action}")
             
     except Exception as e:
-        logger.error(f"AI Agent handler error: {str(e)}")
+        logger.error(f"Unified API handler error: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Send message endpoint - MCP only orchestrates, API Gateway handles everything
-@app.post("/api/v1/send_message", response_model=Dict[str, Any])
-async def send_message(request: MessageRequest):
-    """
-    Send a message by calling API Gateway.
-    MCP server only orchestrates, API Gateway handles storage and WebSocket delivery.
-    """
-    try:
-        logger.info(f"Send message request: {request.booking_code}")
-        
-        # Prepare payload for API Gateway
-        payload = {
-            "booking_code": request.booking_code,
-            "message": request.message,
-            "sender": request.sender,
-            "timestamp": datetime.now().isoformat(),
-            "message_type": request.message_type
-        }
-        
-        # Call API Gateway
-        logger.info(f"Calling API Gateway with payload: {payload}")
-        result = api_gateway_client.call_send_message(payload)
-        logger.info(f"API Gateway response: {result}")
-        
-        if result.get('statusCode') != 200:
-            lambda_response = json.loads(result.get('body', '{}'))
-            raise HTTPException(status_code=result.get('statusCode', 500), detail=lambda_response.get('error', 'Unknown error'))
-        
-        # Parse Lambda response
-        lambda_response = json.loads(result.get('body', '{}'))
-        logger.info(f"Parsed Lambda response: {lambda_response}")
-        
-        return lambda_response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Send message error: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-# Make call endpoint - MCP only orchestrates, API Gateway handles everything
-@app.post("/api/v1/make_call", response_model=Dict[str, Any])
-async def make_call(request: CallRequest):
-    """
-    Handle call operations by calling API Gateway.
-    MCP server only orchestrates, API Gateway handles call logic and WebSocket delivery.
-    """
-    try:
-        logger.info(f"Make call request: {request.booking_code} - {request.action}")
-        
-        # Prepare payload for API Gateway
-        payload = {
-            "booking_code": request.booking_code,
-            "caller_type": request.caller_type,
-            "call_type": request.call_type,
-            "action": request.action,
-            "duration": request.duration,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # Call API Gateway
-        result = api_gateway_client.call_make_call(payload)
-        
-        if result.get('statusCode') != 200:
-            lambda_response = json.loads(result.get('body', '{}'))
-            raise HTTPException(status_code=result.get('statusCode', 500), detail=lambda_response.get('error', 'Unknown error'))
-        
-        # Parse Lambda response
-        lambda_response = json.loads(result.get('body', '{}'))
-        
-        return lambda_response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Make call error: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-# Get messages endpoint - MCP only orchestrates, API Gateway handles everything
-@app.get("/api/v1/get_message/{booking_code}", response_model=Dict[str, Any])
-async def get_message(booking_code: str):
-    """
-    Get messages by calling API Gateway.
-    MCP server only orchestrates, API Gateway handles retrieval and caching.
-    """
-    try:
-        logger.info(f"Get message request: {booking_code}")
-        
-        # Call API Gateway
-        result = api_gateway_client.call_get_message(booking_code)
-        
-        if result.get('statusCode') != 200:
-            lambda_response = json.loads(result.get('body', '{}'))
-            raise HTTPException(status_code=result.get('statusCode', 500), detail=lambda_response.get('error', 'Unknown error'))
-        
-        # Parse Lambda response
-        lambda_response = json.loads(result.get('body', '{}'))
-        
-        return lambda_response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Get message error: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-# Intent detection helper
-def _detect_intent(user_input: str) -> str:
-    """Detect intent from user input"""
-    input_lower = user_input.lower()
-    
-    # Call-related keywords
-    call_keywords = ['call', 'phone', 'ring', 'dial', 'contact']
-    if any(keyword in input_lower for keyword in call_keywords):
-        return 'make_call'
-    
-    # Message-related keywords
-    message_keywords = ['send', 'message', 'text', 'say', 'tell']
-    if any(keyword in input_lower for keyword in message_keywords):
-        return 'send_message'
-    
-    # History-related keywords
-    history_keywords = ['history', 'messages', 'previous', 'past']
-    if any(keyword in input_lower for keyword in history_keywords):
-        return 'get_messages'
-    
-    # Default to send message
-    return 'send_message'
-
-# Message content extraction helper
-def _extract_message_content(user_input: str, intent: str) -> str:
-    """Extract message content from user input based on intent"""
-    if intent == 'make_call':
-        # Extract call-related content
-        call_indicators = ['call', 'phone', 'ring', 'dial']
-        for indicator in call_indicators:
-            if indicator in user_input.lower():
-                # Remove the call indicator and clean up
-                content = user_input.lower().replace(indicator, '').strip()
-                return f"Call {content}" if content else "Call initiated"
-        return "Call initiated"
-    
-    elif intent == 'send_message':
-        # Extract message content
-        message_indicators = ['send', 'message', 'text', 'say', 'tell']
-        for indicator in message_indicators:
-            if indicator in user_input.lower():
-                # Remove the message indicator and clean up
-                content = user_input.lower().replace(indicator, '').strip()
-                return content if content else "Message sent"
-        return user_input
-    
-    else:
-        return user_input
-
-# AI Agent handlers - these call API Gateway
-async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
+# Unified API handlers - these call API Gateway
+async def _handle_send_message(request: UnifiedAPIRequest) -> Dict[str, Any]:
     """Handle send message intent by calling API Gateway"""
-    message_content = _extract_message_content(request.user_input, 'send_message')
+    # Use the user_input directly as it should already be the extracted message from AI
+    message_content = request.user_input
     
     # Call send_message API Gateway
     payload = {
@@ -371,7 +201,7 @@ async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
         "message": message_content,
         "sender": request.user_type,
         "timestamp": datetime.now().isoformat(),
-        "message_type": "text"
+        "message_type": request.message_type or "text"
     }
     
     result = api_gateway_client.call_send_message(payload)
@@ -387,7 +217,7 @@ async def _handle_send_message(request: AIAgentRequest) -> Dict[str, Any]:
         }
     }
 
-async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
+async def _handle_make_call(request: UnifiedAPIRequest) -> Dict[str, Any]:
     """Handle make call intent by calling API Gateway"""
     # Determine caller type
     caller_type = request.user_type
@@ -396,9 +226,9 @@ async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
     payload = {
         "booking_code": request.booking_code,
         "caller_type": caller_type,
-        "call_type": "voice",
+        "call_type": request.call_type or "voice",
         "action": "initiate",
-        "duration": 0,
+        "duration": request.duration or 0,
         "timestamp": datetime.now().isoformat()
     }
     
@@ -415,7 +245,7 @@ async def _handle_make_call(request: AIAgentRequest) -> Dict[str, Any]:
         }
     }
 
-async def _handle_get_messages(request: AIAgentRequest) -> Dict[str, Any]:
+async def _handle_get_messages(request: UnifiedAPIRequest) -> Dict[str, Any]:
     """Handle get messages intent by calling API Gateway"""
     # Call get_message API Gateway
     result = api_gateway_client.call_get_message(request.booking_code)

@@ -61,4 +61,43 @@ output "dynamodb_calls_table" {
 output "dynamodb_connections_table" {
   description = "Name of the connections DynamoDB table"
   value       = aws_dynamodb_table.connections.name
+}
+
+# =============================================================================
+# MCP SERVER OUTPUTS
+# =============================================================================
+
+output "mcp_server_instance_id" {
+  description = "ID of the MCP server EC2 instance"
+  value       = aws_instance.mcp_server.id
+}
+
+output "mcp_server_public_ip" {
+  description = "Public IP address of the MCP server"
+  value       = aws_eip.mcp_server.public_ip
+}
+
+output "mcp_server_public_dns" {
+  description = "Public DNS name of the MCP server"
+  value       = aws_eip.mcp_server.public_dns
+}
+
+output "mcp_server_security_group_id" {
+  description = "ID of the MCP server security group"
+  value       = aws_security_group.mcp_server.id
+}
+
+output "mcp_server_iam_role_arn" {
+  description = "ARN of the MCP server IAM role"
+  value       = aws_iam_role.ec2_role.arn
+}
+
+output "mcp_server_url" {
+  description = "URL to access the MCP server"
+  value       = "http://${aws_eip.mcp_server.public_ip}"
+}
+
+output "mcp_server_health_check_url" {
+  description = "Health check URL for the MCP server"
+  value       = "http://${aws_eip.mcp_server.public_ip}/health"
 } 

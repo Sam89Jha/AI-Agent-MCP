@@ -1,0 +1,3 @@
+{
+  "body": "{\"booking_code\": \"TEST123\", \"message\": \"Hello from direct Lambda\", \"sender\": \"dax\", \"message_type\": \"text\"}"
+} 

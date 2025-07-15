@@ -14,35 +14,29 @@ const CONFIG = {
   isLocal: () => process.env.NODE_ENV === 'development',
   isDebug: () => process.env.NODE_ENV === 'development',
   
-  // Get API URL for endpoint
-  getApiUrl: (endpoint = '') => {
-    const baseUrl = CONFIG.API_BASE_URL;
-    return `${baseUrl}${endpoint}`;
+  // Get AI Intent API URL
+  getAiIntentApiUrl: () => {
+    // Use hosted AI Intent API for all environments
+    return 'http://ai-intent-api-env.eba-7jgtzmmn.us-west-2.elasticbeanstalk.com';
   },
   
   // Get WebSocket URL
   getWebsocketUrl: () => {
-    return CONFIG.WEBSOCKET_URL;
+    // Use hosted WebSocket API Gateway for all environments now
+    return 'wss://gslu2w0885.execute-api.us-east-1.amazonaws.com/prod';
   },
   
   // Get WebSocket URL for specific booking
   getWebsocketUrlForBooking: (bookingCode) => {
-    const baseUrl = CONFIG.WEBSOCKET_URL;
-    // For production, use API Gateway WebSocket endpoint
-    if (CONFIG.isProduction()) {
-      return `${baseUrl}?booking_code=${bookingCode}`;
-    }
-    // For local, use MCP server WebSocket
-    return `${baseUrl}/${bookingCode}`;
+    const baseUrl = 'wss://gslu2w0885.execute-api.us-east-1.amazonaws.com/prod';
+    return `${baseUrl}?booking_code=${bookingCode}`;
   }
 };
 
-// API endpoints
+// API endpoints - Only AI Intent API for voice commands
 const API_ENDPOINTS = {
-  AI_AGENT: CONFIG.getApiUrl('/api/v1/ai_agent'),
-  SEND_MESSAGE: CONFIG.getApiUrl('/api/v1/send_message'),
-  MAKE_CALL: CONFIG.getApiUrl('/api/v1/make_call'),
-  GET_MESSAGES: CONFIG.getApiUrl('/api/v1/get_message'),
+  AI_INTENT_API: `${CONFIG.getAiIntentApiUrl()}/detect_intent`,
+  HEALTH_CHECK: `${CONFIG.getAiIntentApiUrl()}/health`,
 };
 
 export { CONFIG, API_ENDPOINTS };
@@ -54,11 +48,13 @@ export const FEATURES = {
   analytics: CONFIG.isProduction()
 };
 
+export const AI_INTENT_API_URL = CONFIG.getAiIntentApiUrl();
+
 // Debug logging
 if (CONFIG.isDebug()) {
-  console.log('🚀 NavieTakieSimulation - PAX App');
+  console.log('🚀 NavieTakieSimulation - PAX App (Voice Only)');
   console.log('🔧 Environment:', process.env.NODE_ENV);
-  console.log('🌐 API Base URL:', CONFIG.API_BASE_URL);
+  console.log('🌐 AI Intent API URL:', CONFIG.getAiIntentApiUrl());
   console.log('🔌 WebSocket URL:', CONFIG.WEBSOCKET_URL);
   console.log('🚀 Features:', FEATURES);
 } 
